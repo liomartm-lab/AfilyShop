@@ -77,6 +77,8 @@ export default function DashboardPage() {
   const [url, setUrl] = useState("");
   const [result, setResult] = useState<AnalyzeResult | null>(null);
   const [category, setCategory] = useState("General");
+  const [productKeywords, setProductKeywords] = useState("");
+  const [productAttributes, setProductAttributes] = useState("");
   const [newCategory, setNewCategory] = useState({ name: "", icon: "tag", imageUrl: "" });
   const [newCustomer, setNewCustomer] = useState({ name: "", phone: "", email: "", interest: "" });
   const [physicalProduct, setPhysicalProduct] = useState({
@@ -106,6 +108,24 @@ export default function DashboardPage() {
 
   const totalClicks = products.reduce((sum, product) => sum + product.clicks, 0);
   const topProduct = [...products].sort((a, b) => b.clicks - a.clicks)[0];
+
+  function parseKeywords(value: string) {
+    return Array.from(new Set(value.split(",").map((item) => item.trim()).filter(Boolean)));
+  }
+
+  function parseAttributes(value: string) {
+    return Object.fromEntries(
+      value
+        .split("\n")
+        .map((line) => line.split(":"))
+        .filter(([key, ...rest]) => key.trim() && rest.join(":").trim())
+        .map(([key, ...rest]) => [key.trim(), rest.join(":").trim()])
+    );
+  }
+
+  function formatAttributes(attributes: Record<string, string>) {
+    return Object.entries(attributes).map(([key, value]) => `${key}: ${value}`).join("\n");
+  }
 
   async function loadSellerData(currentUser: User) {
     let currentStore = await getStoreByOwnerId(currentUser.uid);
@@ -233,8 +253,36 @@ export default function DashboardPage() {
       const data = await response.json();
       if (!response.ok) throw new Error(data.error || "No se pudo analizar el enlace");
       setResult(data);
+      setProductKeywords("");
+      setProductAttributes("");
     } catch (err) {
       setError(err instanceof Error ? err.message : "Error desconocido");
+    } finally {
+      setWorking(false);
+    }
+  }
+
+  async function suggestProductAttributes() {
+    const source = result || physicalProduct;
+    if (!source.title) return;
+
+    setWorking(true);
+    setError("");
+    setMessage("");
+
+    try {
+      const response = await fetch("/api/suggest-attributes", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ title: source.title, description: source.description, category })
+      });
+      const data = await response.json();
+      if (!response.ok) throw new Error(data.error || "No se pudieron sugerir atributos");
+      setProductKeywords((data.keywords || []).join(", "));
+      setProductAttributes(formatAttributes(data.attributes || {}));
+      setMessage("Sugerencias aplicadas. Puedes editarlas antes de publicar.");
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "No se pudieron sugerir atributos");
     } finally {
       setWorking(false);
     }
@@ -252,12 +300,16 @@ export default function DashboardPage() {
         ...result,
         ownerId: user.uid,
         storeId: store.id,
-        category
+        category,
+        keywords: parseKeywords(productKeywords),
+        attributes: parseAttributes(productAttributes)
       });
 
       setProducts(await getProductsByOwner(user.uid));
       setResult(null);
       setUrl("");
+      setProductKeywords("");
+      setProductAttributes("");
       setMessage("Producto publicado en tu tienda.");
       setActiveTab("products");
     } catch (err) {
@@ -289,11 +341,15 @@ export default function DashboardPage() {
         originalUrl: publicUrl || "https://afilyshop.local",
         affiliateUrl: publicUrl || "https://afilyshop.local",
         store: store.name,
-        category
+        category,
+        keywords: parseKeywords(productKeywords),
+        attributes: parseAttributes(productAttributes)
       });
 
       setProducts(await getProductsByOwner(user.uid));
       setPhysicalProduct({ title: "", description: "", price: "", image: "", stock: "En existencia", deliveryTime: "" });
+      setProductKeywords("");
+      setProductAttributes("");
       setMessage("Producto fisico publicado.");
     } catch (err) {
       setError(err instanceof Error ? err.message : "No se pudo publicar el producto fisico");
@@ -608,6 +664,19 @@ export default function DashboardPage() {
                         <input value={physicalProduct.image} onChange={(event) => setPhysicalProduct({ ...physicalProduct, image: event.target.value })} className="rounded-2xl border border-slate-200 px-4 py-4 outline-none ring-brand-100 focus:ring-4" placeholder="URL de imagen" />
                         <input value={physicalProduct.deliveryTime} onChange={(event) => setPhysicalProduct({ ...physicalProduct, deliveryTime: event.target.value })} className="rounded-2xl border border-slate-200 px-4 py-4 outline-none ring-brand-100 focus:ring-4" placeholder="Entrega" />
                       </div>
+                      <div className="grid gap-3 rounded-2xl bg-slate-50 p-4 md:grid-cols-2">
+                        <label>
+                          <span className="text-xs font-black text-slate-500">Palabras clave</span>
+                          <input value={productKeywords} onChange={(event) => setProductKeywords(event.target.value)} className="mt-1 w-full rounded-2xl border border-slate-200 px-4 py-3 outline-none ring-brand-100 focus:ring-4" placeholder="iphone, 128gb, azul" />
+                        </label>
+                        <label>
+                          <span className="text-xs font-black text-slate-500">Atributos filtrables</span>
+                          <textarea value={productAttributes} onChange={(event) => setProductAttributes(event.target.value)} className="mt-1 min-h-24 w-full rounded-2xl border border-slate-200 px-4 py-3 text-sm outline-none ring-brand-100 focus:ring-4" placeholder={"RAM: 8 GB\nPantalla: 6.1 pulgadas"} />
+                        </label>
+                        <button onClick={suggestProductAttributes} disabled={working || !physicalProduct.title} className="inline-flex items-center justify-center gap-2 rounded-2xl bg-white px-5 py-4 font-black text-slate-950 ring-1 ring-slate-200 disabled:opacity-60 md:col-span-2">
+                          {working ? <Loader2 className="animate-spin" /> : <WandSparkles />} Sugerir palabras y atributos con IA
+                        </button>
+                      </div>
                       <button onClick={publishPhysicalProduct} disabled={working || !physicalProduct.title} className="inline-flex items-center justify-center gap-2 rounded-2xl bg-slate-950 px-5 py-4 font-black text-white disabled:opacity-60">
                         {working ? <Loader2 className="animate-spin" /> : <PackagePlus />} Publicar producto fisico
                       </button>
@@ -668,6 +737,19 @@ export default function DashboardPage() {
                         <span className="text-xs font-black text-slate-500">Link afiliado final</span>
                         <input value={result.affiliateUrl} onChange={(event) => setResult({ ...result, affiliateUrl: event.target.value })} className="mt-1 w-full rounded-2xl border border-slate-200 px-4 py-3 outline-none ring-brand-100 focus:ring-4" />
                       </label>
+                      <div className="mt-4 grid gap-3 rounded-2xl bg-slate-50 p-4 md:grid-cols-2">
+                        <label>
+                          <span className="text-xs font-black text-slate-500">Palabras clave</span>
+                          <input value={productKeywords} onChange={(event) => setProductKeywords(event.target.value)} className="mt-1 w-full rounded-2xl border border-slate-200 px-4 py-3 outline-none ring-brand-100 focus:ring-4" placeholder="ecoflow, bateria, solar" />
+                        </label>
+                        <label>
+                          <span className="text-xs font-black text-slate-500">Atributos filtrables</span>
+                          <textarea value={productAttributes} onChange={(event) => setProductAttributes(event.target.value)} className="mt-1 min-h-24 w-full rounded-2xl border border-slate-200 px-4 py-3 text-sm outline-none ring-brand-100 focus:ring-4" placeholder={"Capacidad: 286 Wh\nUso: Respaldo"} />
+                        </label>
+                        <button onClick={suggestProductAttributes} disabled={working || !result.title} className="inline-flex items-center justify-center gap-2 rounded-2xl bg-white px-5 py-4 font-black text-slate-950 ring-1 ring-slate-200 disabled:opacity-60 md:col-span-2">
+                          {working ? <Loader2 className="animate-spin" /> : <WandSparkles />} Sugerir palabras y atributos con IA
+                        </button>
+                      </div>
                       <button onClick={publishProduct} disabled={working} className="mt-4 inline-flex w-full items-center justify-center gap-2 rounded-2xl bg-emerald-500 px-5 py-4 font-black text-white hover:bg-emerald-600 disabled:opacity-60">
                         {working ? <Loader2 className="animate-spin" /> : <PackagePlus />} Publicar en mi tienda
                       </button>

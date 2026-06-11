@@ -12,6 +12,8 @@ export type Product = {
   images?: string[];
   stock?: string;
   deliveryTime?: string;
+  keywords?: string[];
+  attributes?: Record<string, string>;
   category: string;
   store: string;
   originalUrl: string;

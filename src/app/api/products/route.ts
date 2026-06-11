@@ -10,6 +10,8 @@ const productSchema = z.object({
   price: z.string().nullable(),
   stock: z.string().optional(),
   deliveryTime: z.string().optional(),
+  keywords: z.array(z.string()).optional(),
+  attributes: z.record(z.string(), z.string()).optional(),
   originalUrl: z.string().url(),
   affiliateUrl: z.string().url(),
   store: z.string().min(1),

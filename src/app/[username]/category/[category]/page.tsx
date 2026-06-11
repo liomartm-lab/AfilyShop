@@ -3,6 +3,7 @@ import { notFound } from "next/navigation";
 import { ProductCard } from "@/components/ProductCard";
 import { getPublishedProductsByOwner } from "@/lib/products";
 import { getStoreByUsername } from "@/lib/stores";
+import { ArrowLeft, Home } from "lucide-react";
 
 export const dynamic = "force-dynamic";
 
@@ -18,16 +19,23 @@ export default async function PublicCategoryPage({ params }: { params: Promise<{
   return (
     <main className="min-h-screen bg-[#f7f8fb]">
       <header className="border-b border-slate-200 bg-white">
-        <div className="mx-auto flex max-w-7xl items-center justify-between px-5 py-4">
+        <div className="mx-auto flex max-w-[1600px] items-center justify-between px-5 py-4">
           <Link href={`/${store.username}`} className="text-xl font-black text-slate-950">{store.name}</Link>
-          <Link href={`/${store.username}`} className="text-sm font-bold text-slate-500">Volver al catálogo</Link>
+          <div className="flex items-center gap-2">
+            <Link href={`/${store.username}`} className="inline-flex items-center gap-2 rounded-2xl bg-slate-100 px-4 py-2 text-sm font-black text-slate-700">
+              <ArrowLeft size={16} /> Todas
+            </Link>
+            <Link href="/" className="grid size-10 place-items-center rounded-2xl bg-slate-950 text-white">
+              <Home size={16} />
+            </Link>
+          </div>
         </div>
       </header>
 
-      <section className="mx-auto max-w-7xl px-5 py-10">
+      <section className="mx-auto max-w-[1600px] px-5 py-10">
         <p className="font-black uppercase tracking-wide" style={{ color: store.theme.primaryColor }}>Categoría</p>
         <h1 className="mt-2 text-4xl font-black text-slate-950">{categoryName}</h1>
-        <div className="mt-8 grid gap-6 md:grid-cols-2 lg:grid-cols-3">
+        <div className="mt-8 grid gap-5 sm:grid-cols-2 xl:grid-cols-3 2xl:grid-cols-4">
           {products.map((product) => (
             <ProductCard key={product.id} product={product} productPath={`/${store.username}/product/${product.slug}`} />
           ))}

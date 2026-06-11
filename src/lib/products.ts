@@ -24,6 +24,8 @@ export type ProductInput = {
   price: string | null;
   stock?: string;
   deliveryTime?: string;
+  keywords?: string[];
+  attributes?: Record<string, string>;
   originalUrl: string;
   affiliateUrl: string;
   store: string;
@@ -31,6 +33,10 @@ export type ProductInput = {
 };
 
 function productFromDoc(id: string, data: Record<string, unknown>): Product {
+  const attributes = data.attributes && typeof data.attributes === "object" && !Array.isArray(data.attributes)
+    ? Object.fromEntries(Object.entries(data.attributes as Record<string, unknown>).map(([key, value]) => [key, String(value)]))
+    : {};
+
   return {
     id,
     ownerId: typeof data.ownerId === "string" ? data.ownerId : undefined,
@@ -45,6 +51,8 @@ function productFromDoc(id: string, data: Record<string, unknown>): Product {
     images: Array.isArray(data.images) ? data.images.map(String) : [],
     stock: typeof data.stock === "string" ? data.stock : "",
     deliveryTime: typeof data.deliveryTime === "string" ? data.deliveryTime : "",
+    keywords: Array.isArray(data.keywords) ? data.keywords.map(String) : [],
+    attributes,
     category: String(data.category || "Sin categoría"),
     store: String(data.store || "Tienda externa"),
     originalUrl: String(data.originalUrl || ""),
@@ -148,6 +156,8 @@ export async function createProduct(input: ProductInput) {
     images: input.images || (input.image ? [input.image] : []),
     stock: input.stock || "",
     deliveryTime: input.deliveryTime || "",
+    keywords: input.keywords || [],
+    attributes: input.attributes || {},
     originalUrl: input.originalUrl,
     affiliateUrl: input.affiliateUrl,
     store: input.store,

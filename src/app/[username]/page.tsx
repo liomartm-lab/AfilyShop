@@ -1,6 +1,6 @@
 import Link from "next/link";
 import { notFound } from "next/navigation";
-import { ProductCard } from "@/components/ProductCard";
+import { StorefrontExplorer } from "@/components/StorefrontExplorer";
 import { getPublishedProductsByOwner } from "@/lib/products";
 import { getStoreByUsername } from "@/lib/stores";
 import { Mail, MessageCircle, Search, ShoppingBag, Sparkles } from "lucide-react";
@@ -14,12 +14,12 @@ export default async function PublicStorePage({ params }: { params: Promise<{ us
 
   const products = await getPublishedProductsByOwner(store.ownerId);
   const whatsappPhone = store.phone.replace(/\D/g, "");
-  const categoryNames = Array.from(new Set(products.map((product) => product.category))).slice(0, 8);
+  const categoryNames = Array.from(new Set(products.map((product) => product.category)));
 
   return (
     <main className="min-h-screen bg-[#f7f8fb]" style={{ "--store-primary": store.theme.primaryColor, "--store-accent": store.theme.accentColor } as React.CSSProperties}>
       <header className="sticky top-0 z-30 border-b border-white/70 bg-white/85 backdrop-blur-xl">
-        <div className="mx-auto flex max-w-7xl items-center justify-between px-5 py-4">
+        <div className="mx-auto flex max-w-[1600px] items-center justify-between px-5 py-4">
           <Link href={`/${store.username}`} className="flex items-center gap-3">
             {store.logoUrl ? (
               // eslint-disable-next-line @next/next/no-img-element
@@ -38,8 +38,8 @@ export default async function PublicStorePage({ params }: { params: Promise<{ us
         </div>
       </header>
 
-      <section className="mx-auto max-w-7xl px-5 py-8">
-        <div className="grid gap-8 overflow-hidden rounded-[2rem] bg-slate-950 p-6 text-white shadow-soft md:grid-cols-[1fr_360px] md:p-8">
+      <section className="mx-auto max-w-[1600px] px-5 py-8">
+        <div className="grid gap-8 overflow-hidden rounded-[2rem] bg-slate-950 p-6 text-white shadow-soft lg:grid-cols-[1fr_420px] lg:p-8">
           <div>
             <div className="inline-flex items-center gap-2 rounded-full bg-white/10 px-4 py-2 text-sm font-black ring-1 ring-white/10">
               <Sparkles size={16} /> Catálogo exclusivo
@@ -61,9 +61,9 @@ export default async function PublicStorePage({ params }: { params: Promise<{ us
             {!!categoryNames.length && (
               <div className="mt-7 flex flex-wrap gap-2">
                 {categoryNames.map((category) => (
-                  <Link key={category} href={`/${store.username}/category/${encodeURIComponent(category)}`} className="rounded-full bg-white/10 px-4 py-2 text-sm font-bold ring-1 ring-white/10">
+                  <span key={category} className="rounded-full bg-white/10 px-4 py-2 text-sm font-bold ring-1 ring-white/10">
                     {category}
-                  </Link>
+                  </span>
                 ))}
               </div>
             )}
@@ -84,18 +84,15 @@ export default async function PublicStorePage({ params }: { params: Promise<{ us
         </div>
       </section>
 
-      <section className="mx-auto max-w-7xl px-5 pb-14">
-        <div className="grid gap-6 md:grid-cols-2 lg:grid-cols-3">
-          {products.map((product) => (
-            <ProductCard key={product.id} product={product} productPath={`/${store.username}/product/${product.slug}`} />
-          ))}
-        </div>
-        {!products.length && (
+      {products.length ? (
+        <StorefrontExplorer products={products} username={store.username} categoryNames={categoryNames} />
+      ) : (
+        <section className="mx-auto max-w-[1600px] px-5 pb-14">
           <div className="rounded-[2rem] bg-white p-10 text-center font-semibold text-slate-400 shadow-soft ring-1 ring-slate-100">
             Esta tienda todavía no tiene productos publicados.
           </div>
-        )}
-      </section>
+        </section>
+      )}
     </main>
   );
 }
