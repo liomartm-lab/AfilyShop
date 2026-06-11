@@ -5,6 +5,21 @@ import { buildAffiliateUrl } from "@/lib/affiliate";
 
 const bodySchema = z.object({ url: z.string().url() });
 
+type AnalyzeProduct = {
+  title: string;
+  description: string;
+  image: string;
+  images: string[];
+  price: string | null;
+  stock: string;
+  deliveryTime: string;
+  originalUrl: string;
+  affiliateUrl: string;
+  store: string;
+  blocked?: boolean;
+  warning?: string;
+};
+
 function fallbackProduct(originalUrl: string, reason: string) {
   const url = new URL(originalUrl);
   const store = url.hostname.replace("www.", "");
@@ -28,7 +43,7 @@ function fallbackProduct(originalUrl: string, reason: string) {
     store,
     blocked: true,
     warning: reason
-  };
+  } satisfies AnalyzeProduct;
 }
 
 function readMeta($: cheerio.CheerioAPI, selectors: string[]) {
@@ -76,24 +91,111 @@ function readImages($: cheerio.CheerioAPI, originalUrl: string) {
   return Array.from(images).filter((image) => !image.startsWith("data:")).slice(0, 8);
 }
 
+function productSlugFromUrl(productUrl: string) {
+  return new URL(productUrl).pathname.split("/").filter(Boolean).pop() || "";
+}
+
+function decodeHtml(value: string) {
+  return cleanText(cheerio.load(value).text() || value);
+}
+
+async function fetchWithBrowserApi(productUrl: string) {
+  if (process.env.ZENROWS_API_KEY) {
+    const apiUrl = new URL("https://api.zenrows.com/v1/");
+    apiUrl.searchParams.set("apikey", process.env.ZENROWS_API_KEY);
+    apiUrl.searchParams.set("url", productUrl);
+    apiUrl.searchParams.set("js_render", "true");
+    apiUrl.searchParams.set("premium_proxy", "true");
+
+    return fetch(apiUrl, { cache: "no-store" });
+  }
+
+  if (process.env.SCRAPERAPI_KEY) {
+    const apiUrl = new URL("https://api.scraperapi.com/");
+    apiUrl.searchParams.set("api_key", process.env.SCRAPERAPI_KEY);
+    apiUrl.searchParams.set("url", productUrl);
+    apiUrl.searchParams.set("render", "true");
+    apiUrl.searchParams.set("premium", "true");
+
+    return fetch(apiUrl, { cache: "no-store" });
+  }
+
+  return null;
+}
+
+async function readWooCommerceStoreApi(productUrl: string): Promise<AnalyzeProduct | null> {
+  const url = new URL(productUrl);
+  const slug = productSlugFromUrl(productUrl);
+  if (!slug) return null;
+
+  const apiUrl = new URL("/wp-json/wc/store/v1/products", url.origin);
+  apiUrl.searchParams.set("slug", slug);
+
+  const response = await fetch(apiUrl, {
+    headers: {
+      "User-Agent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/125.0.0.0 Safari/537.36",
+      "Accept": "application/json",
+      "Accept-Language": "es,en;q=0.9"
+    },
+    cache: "no-store"
+  });
+
+  if (!response.ok) return null;
+
+  const data = await response.json();
+  const product = Array.isArray(data) ? data[0] : null;
+  if (!product) return null;
+
+  const images = Array.isArray(product.images)
+    ? product.images.map((image: { src?: string }) => image.src).filter(Boolean)
+    : [];
+  const price = product.prices?.price
+    ? String(Number(product.prices.price) / 10 ** Number(product.prices.currency_minor_unit || 2))
+    : null;
+
+  return {
+    title: decodeHtml(product.name || "Título no detectado"),
+    description: decodeHtml(product.short_description || product.description || ""),
+    image: images[0] || "",
+    images,
+    price,
+    stock: decodeHtml(product.is_in_stock ? "En existencia" : "Sin existencia"),
+    deliveryTime: "",
+    originalUrl: productUrl,
+    affiliateUrl: buildAffiliateUrl(productUrl),
+    store: url.hostname.replace("www.", "")
+  };
+}
+
+async function fetchProductHtml(productUrl: string) {
+  const response = await fetch(productUrl, {
+    headers: {
+      "User-Agent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/125.0.0.0 Safari/537.36",
+      "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,*/*;q=0.8",
+      "Accept-Language": "es,en;q=0.9",
+      "Referer": new URL(productUrl).origin
+    },
+    cache: "no-store"
+  });
+
+  if (response.ok) return response.text();
+
+  const browserResponse = await fetchWithBrowserApi(productUrl);
+  if (browserResponse?.ok) return browserResponse.text();
+
+  throw new Error(`La tienda respondió con error ${response.status}. Puedes publicar el producto completando los datos manualmente.`);
+}
+
 export async function POST(request: Request) {
+  let requestedUrl = "";
+
   try {
     const body = bodySchema.parse(await request.json());
-    const response = await fetch(body.url, {
-      headers: {
-        "User-Agent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/125.0.0.0 Safari/537.36",
-        "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,*/*;q=0.8",
-        "Accept-Language": "es,en;q=0.9",
-        "Referer": new URL(body.url).origin
-      },
-      cache: "no-store"
-    });
+    requestedUrl = body.url;
+    const wooProduct = await readWooCommerceStoreApi(body.url);
+    if (wooProduct) return NextResponse.json(wooProduct);
 
-    if (!response.ok) {
-      return NextResponse.json(fallbackProduct(body.url, `La tienda respondió con error ${response.status}. Puedes publicar el producto completando los datos manualmente.`));
-    }
-
-    const html = await response.text();
+    const html = await fetchProductHtml(body.url);
     const $ = cheerio.load(html);
     const url = new URL(body.url);
 
@@ -153,6 +255,13 @@ export async function POST(request: Request) {
       store: url.hostname.replace("www.", "")
     });
   } catch (error) {
-    return NextResponse.json({ error: error instanceof Error ? error.message : "No se pudo analizar el enlace" }, { status: 400 });
+    if (!requestedUrl) {
+      return NextResponse.json({ error: error instanceof Error ? error.message : "No se pudo analizar el enlace" }, { status: 400 });
+    }
+
+    return NextResponse.json(fallbackProduct(
+      requestedUrl,
+      error instanceof Error ? error.message : "No se pudo analizar el enlace"
+    ));
   }
 }
