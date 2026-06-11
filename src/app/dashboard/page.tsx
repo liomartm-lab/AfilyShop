@@ -5,12 +5,25 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { onAuthStateChanged, signOut, type User } from "firebase/auth";
 import { getDownloadURL, ref, uploadBytes } from "firebase/storage";
-import { Header } from "@/components/Header";
 import type { Product } from "@/data/products";
-import { auth, storage } from "@/lib/firebase";
+import { auth, keepSessionInBrowser, storage } from "@/lib/firebase";
 import { createProduct, getProductsByOwner } from "@/lib/products";
 import { createDefaultStore, getStoreByOwnerId, updateStore, type StoreProfile } from "@/lib/stores";
-import { ExternalLink, Loader2, LogOut, PackagePlus, Save, Upload, WandSparkles } from "lucide-react";
+import {
+  BarChart3,
+  Boxes,
+  ExternalLink,
+  LayoutDashboard,
+  Loader2,
+  LogOut,
+  PackagePlus,
+  Palette,
+  Save,
+  Tags,
+  Upload,
+  UserRound,
+  WandSparkles
+} from "lucide-react";
 
 type AnalyzeResult = {
   title: string;
@@ -22,8 +35,20 @@ type AnalyzeResult = {
   store: string;
 };
 
+type DashboardTab = "overview" | "profile" | "store" | "products" | "categories" | "analytics";
+
+const tabs: Array<{ id: DashboardTab; label: string; icon: typeof LayoutDashboard }> = [
+  { id: "overview", label: "Resumen", icon: LayoutDashboard },
+  { id: "profile", label: "Perfil", icon: UserRound },
+  { id: "store", label: "Tienda", icon: Palette },
+  { id: "products", label: "Productos", icon: Boxes },
+  { id: "categories", label: "Categorias", icon: Tags },
+  { id: "analytics", label: "Analitica", icon: BarChart3 }
+];
+
 export default function DashboardPage() {
   const router = useRouter();
+  const [activeTab, setActiveTab] = useState<DashboardTab>("overview");
   const [user, setUser] = useState<User | null>(null);
   const [store, setStore] = useState<StoreProfile | null>(null);
   const [products, setProducts] = useState<Product[]>([]);
@@ -41,10 +66,24 @@ export default function DashboardPage() {
     return `${window.location.origin}/${store.username}`;
   }, [store]);
 
+  const categories = useMemo(() => {
+    const unique = new Map<string, number>();
+    products.forEach((product) => unique.set(product.category, (unique.get(product.category) || 0) + 1));
+    return Array.from(unique.entries()).map(([name, count]) => ({ name, count }));
+  }, [products]);
+
+  const totalClicks = products.reduce((sum, product) => sum + product.clicks, 0);
+  const topProduct = [...products].sort((a, b) => b.clicks - a.clicks)[0];
+
   async function loadSellerData(currentUser: User) {
     let currentStore = await getStoreByOwnerId(currentUser.uid);
     if (!currentStore) {
-      currentStore = await createDefaultStore(currentUser.uid, currentUser.email || "usuario@email.com");
+      currentStore = await createDefaultStore(
+        currentUser.uid,
+        currentUser.email || "usuario@email.com",
+        currentUser.email?.split("@")[0],
+        currentUser.displayName || "Vendedor"
+      );
     }
 
     setStore(currentStore);
@@ -53,14 +92,16 @@ export default function DashboardPage() {
 
   useEffect(() => {
     if (!auth) {
-      setError("Firebase no está configurado");
+      setError("Firebase no esta configurado");
       setLoading(false);
       return;
     }
 
+    keepSessionInBrowser();
+
     return onAuthStateChanged(auth, async (currentUser) => {
       if (!currentUser) {
-        router.push("/login");
+        router.replace("/login");
         return;
       }
 
@@ -76,7 +117,7 @@ export default function DashboardPage() {
     });
   }, [router]);
 
-  async function saveStore() {
+  async function saveStore(nextSetupComplete = store?.setupComplete || false) {
     if (!user || !store) return;
 
     setWorking(true);
@@ -85,6 +126,7 @@ export default function DashboardPage() {
 
     try {
       const updated = await updateStore(user.uid, {
+        ownerName: store.ownerName,
         name: store.name,
         username: store.username,
         logoUrl: store.logoUrl,
@@ -92,20 +134,20 @@ export default function DashboardPage() {
         contactEmail: store.contactEmail,
         phone: store.phone,
         theme: store.theme,
-        setupComplete: store.setupComplete
+        setupComplete: nextSetupComplete
       });
 
       setStore(updated);
-      setMessage("Tienda actualizada.");
+      setMessage("Cambios guardados.");
     } catch (err) {
-      setError(err instanceof Error ? err.message : "No se pudo guardar la tienda");
+      setError(err instanceof Error ? err.message : "No se pudo guardar");
     } finally {
       setWorking(false);
     }
   }
 
   async function uploadLogo(file: File) {
-    if (!user || !store || !storage) return setError("Firebase Storage no está configurado");
+    if (!user || !store || !storage) return setError("Firebase Storage no esta configurado");
 
     setWorking(true);
     setError("");
@@ -116,7 +158,7 @@ export default function DashboardPage() {
       await uploadBytes(logoRef, file);
       const logoUrl = await getDownloadURL(logoRef);
       setStore({ ...store, logoUrl });
-      setMessage("Logo subido. Recuerda guardar la tienda.");
+      setMessage("Logo subido. Guarda la tienda para conservarlo.");
     } catch (err) {
       setError(err instanceof Error ? err.message : "No se pudo subir el logo");
     } finally {
@@ -166,6 +208,7 @@ export default function DashboardPage() {
       setResult(null);
       setUrl("");
       setMessage("Producto publicado en tu tienda.");
+      setActiveTab("products");
     } catch (err) {
       setError(err instanceof Error ? err.message : "No se pudo publicar el producto");
     } finally {
@@ -176,156 +219,301 @@ export default function DashboardPage() {
   async function logout() {
     if (!auth) return;
     await signOut(auth);
-    router.push("/login");
+    router.replace("/login");
   }
 
   if (loading) {
     return (
-      <main>
-        <Header />
-        <div className="grid min-h-[60vh] place-items-center">
-          <Loader2 className="animate-spin text-brand-600" size={36} />
-        </div>
+      <main className="grid min-h-screen place-items-center bg-[#f7f8fb]">
+        <Loader2 className="animate-spin text-brand-600" size={36} />
       </main>
     );
   }
 
   return (
-    <main>
-      <Header />
-      <section className="mx-auto max-w-7xl px-5 py-8">
-        <div className="mb-8 flex flex-col justify-between gap-4 md:flex-row md:items-end">
-          <div>
-            <p className="font-bold uppercase tracking-wide text-brand-600">Dashboard</p>
-            <h1 className="text-4xl font-black text-slate-950">{store?.name || "Mi tienda"}</h1>
-            {store && <a href={publicUrl} target="_blank" className="mt-2 inline-flex items-center gap-2 text-sm font-bold text-brand-600">{publicUrl} <ExternalLink size={14} /></a>}
+    <main className="min-h-screen bg-[#f7f8fb]">
+      <header className="sticky top-0 z-30 border-b border-slate-200 bg-white/90 backdrop-blur">
+        <div className="mx-auto flex max-w-7xl items-center justify-between gap-4 px-5 py-4">
+          <Link href="/" className="flex items-center gap-2 text-lg font-black text-slate-950">
+            <span className="grid size-9 place-items-center rounded-2xl bg-brand-600 text-white">A</span>
+            AfiliShop
+          </Link>
+          <div className="flex items-center gap-2">
+            {store && (
+              <a href={publicUrl} target="_blank" className="hidden items-center gap-2 rounded-2xl bg-brand-50 px-4 py-2 text-sm font-black text-brand-600 sm:inline-flex">
+                Ver mi pagina <ExternalLink size={16} />
+              </a>
+            )}
+            <button onClick={logout} className="inline-flex items-center gap-2 rounded-2xl bg-slate-950 px-4 py-2 text-sm font-black text-white">
+              <LogOut size={16} /> Salir
+            </button>
           </div>
-          <button onClick={logout} className="inline-flex items-center justify-center gap-2 rounded-2xl bg-slate-900 px-5 py-3 font-bold text-white">
-            <LogOut size={18} /> Salir
-          </button>
         </div>
+      </header>
 
-        {(error || message) && (
-          <div className={`mb-6 rounded-2xl p-4 text-sm font-semibold ${error ? "bg-red-50 text-red-700" : "bg-emerald-50 text-emerald-700"}`}>
-            {error || message}
+      <section className="mx-auto grid max-w-7xl gap-6 px-5 py-8 lg:grid-cols-[260px_1fr]">
+        <aside className="h-fit rounded-[2rem] bg-white p-3 shadow-soft ring-1 ring-slate-100">
+          <div className="p-3">
+            <div className="text-sm font-black text-slate-400">Panel del vendedor</div>
+            <div className="mt-1 truncate text-xl font-black text-slate-950">{store?.name || "Mi tienda"}</div>
           </div>
-        )}
+          <nav className="grid gap-1">
+            {tabs.map((tab) => (
+              <button
+                key={tab.id}
+                onClick={() => setActiveTab(tab.id)}
+                className={`flex items-center gap-3 rounded-2xl px-4 py-3 text-left text-sm font-black ${
+                  activeTab === tab.id ? "bg-brand-600 text-white" : "text-slate-600 hover:bg-slate-50"
+                }`}
+              >
+                <tab.icon size={18} /> {tab.label}
+              </button>
+            ))}
+          </nav>
+        </aside>
 
-        <div className="grid gap-8 lg:grid-cols-[.95fr_1.05fr]">
-          <section className="rounded-[2rem] bg-white p-6 shadow-soft ring-1 ring-slate-100">
-            <h2 className="text-2xl font-black">Configurar tienda</h2>
-            <div className="mt-5 grid gap-4">
-              <label>
-                <span className="text-sm font-black text-slate-700">Nombre</span>
-                <input value={store?.name || ""} onChange={(event) => store && setStore({ ...store, name: event.target.value })} className="mt-2 w-full rounded-2xl border border-slate-200 px-4 py-4 outline-none ring-brand-100 focus:ring-4" />
-              </label>
-              <label>
-                <span className="text-sm font-black text-slate-700">Usuario público</span>
-                <input value={store?.username || ""} onChange={(event) => store && setStore({ ...store, username: event.target.value })} className="mt-2 w-full rounded-2xl border border-slate-200 px-4 py-4 outline-none ring-brand-100 focus:ring-4" />
-              </label>
-              <label>
-                <span className="text-sm font-black text-slate-700">Logo por URL</span>
-                <input value={store?.logoUrl || ""} onChange={(event) => store && setStore({ ...store, logoUrl: event.target.value })} className="mt-2 w-full rounded-2xl border border-slate-200 px-4 py-4 outline-none ring-brand-100 focus:ring-4" placeholder="https://..." />
-              </label>
-              <div className="flex flex-col gap-3 rounded-2xl border border-slate-200 p-4 sm:flex-row sm:items-center">
-                {store?.logoUrl ? (
-                  // eslint-disable-next-line @next/next/no-img-element
-                  <img src={store.logoUrl} alt="Logo" className="size-14 rounded-2xl object-cover" />
-                ) : (
-                  <div className="grid size-14 place-items-center rounded-2xl bg-brand-50 font-black text-brand-600">A</div>
-                )}
-                <label className="inline-flex cursor-pointer items-center justify-center gap-2 rounded-2xl bg-slate-950 px-4 py-3 text-sm font-black text-white">
-                  <Upload size={16} /> Subir logo
-                  <input type="file" accept="image/*" className="hidden" onChange={(event) => event.target.files?.[0] && uploadLogo(event.target.files[0])} />
-                </label>
+        <div>
+          <div className="mb-6">
+            <p className="font-black uppercase tracking-wide text-brand-600">Dashboard</p>
+            <h1 className="mt-2 text-4xl font-black text-slate-950">{store?.name || "Mi tienda"}</h1>
+            {publicUrl && <p className="mt-2 break-all text-sm font-bold text-slate-500">{publicUrl}</p>}
+          </div>
+
+          {(error || message) && (
+            <div className={`mb-6 rounded-2xl p-4 text-sm font-semibold ${error ? "bg-red-50 text-red-700" : "bg-emerald-50 text-emerald-700"}`}>
+              {error || message}
+            </div>
+          )}
+
+          {activeTab === "overview" && (
+            <div className="grid gap-6">
+              <div className="grid gap-4 md:grid-cols-4">
+                {[
+                  ["Productos", products.length],
+                  ["Categorias", categories.length],
+                  ["Clics", totalClicks],
+                  ["Plan", store?.plan || "free"]
+                ].map(([label, value]) => (
+                  <div key={label} className="rounded-[1.5rem] bg-white p-5 shadow-soft ring-1 ring-slate-100">
+                    <div className="text-sm font-black text-slate-400">{label}</div>
+                    <div className="mt-2 text-3xl font-black text-slate-950">{value}</div>
+                  </div>
+                ))}
               </div>
-              <label>
-                <span className="text-sm font-black text-slate-700">Descripción</span>
-                <textarea value={store?.description || ""} onChange={(event) => store && setStore({ ...store, description: event.target.value })} className="mt-2 min-h-28 w-full rounded-2xl border border-slate-200 px-4 py-4 outline-none ring-brand-100 focus:ring-4" />
-              </label>
-              <div className="grid gap-4 md:grid-cols-2">
+
+              <div className="grid gap-6 lg:grid-cols-2">
+                <section className="rounded-[2rem] bg-white p-6 shadow-soft ring-1 ring-slate-100">
+                  <h2 className="text-2xl font-black">Acciones rapidas</h2>
+                  <div className="mt-5 grid gap-3 sm:grid-cols-2">
+                    <button onClick={() => setActiveTab("products")} className="rounded-2xl bg-slate-950 px-5 py-4 text-left font-black text-white">Gestionar mis productos</button>
+                    <button onClick={() => setActiveTab("store")} className="rounded-2xl bg-brand-600 px-5 py-4 text-left font-black text-white">Editar mi tienda</button>
+                    <a href={publicUrl} target="_blank" className="rounded-2xl bg-white px-5 py-4 text-left font-black text-slate-950 ring-1 ring-slate-200">Ver mi pagina</a>
+                    <button onClick={() => setActiveTab("analytics")} className="rounded-2xl bg-white px-5 py-4 text-left font-black text-slate-950 ring-1 ring-slate-200">Ver analitica</button>
+                  </div>
+                </section>
+
+                <section className="rounded-[2rem] bg-slate-950 p-6 text-white shadow-soft">
+                  <h2 className="text-2xl font-black">Producto destacado</h2>
+                  {topProduct ? (
+                    <div className="mt-5">
+                      <div className="text-xl font-black">{topProduct.title}</div>
+                      <div className="mt-2 text-sm font-semibold text-slate-300">{topProduct.clicks} clics registrados</div>
+                    </div>
+                  ) : (
+                    <p className="mt-5 text-slate-300">Publica tu primer producto para empezar a medir resultados.</p>
+                  )}
+                </section>
+              </div>
+            </div>
+          )}
+
+          {activeTab === "profile" && store && (
+            <section className="rounded-[2rem] bg-white p-6 shadow-soft ring-1 ring-slate-100">
+              <h2 className="text-2xl font-black">Perfil</h2>
+              <div className="mt-5 grid gap-4 md:grid-cols-2">
                 <label>
-                  <span className="text-sm font-black text-slate-700">Teléfono / WhatsApp</span>
-                  <input value={store?.phone || ""} onChange={(event) => store && setStore({ ...store, phone: event.target.value })} className="mt-2 w-full rounded-2xl border border-slate-200 px-4 py-4 outline-none ring-brand-100 focus:ring-4" placeholder="+1 555 000 0000" />
+                  <span className="text-sm font-black text-slate-700">Nombre del vendedor</span>
+                  <input value={store.ownerName} onChange={(event) => setStore({ ...store, ownerName: event.target.value })} className="mt-2 w-full rounded-2xl border border-slate-200 px-4 py-4 outline-none ring-brand-100 focus:ring-4" />
+                </label>
+                <label>
+                  <span className="text-sm font-black text-slate-700">Correo de cuenta</span>
+                  <input value={user?.email || ""} disabled className="mt-2 w-full rounded-2xl border border-slate-200 bg-slate-50 px-4 py-4 text-slate-500" />
                 </label>
                 <label>
                   <span className="text-sm font-black text-slate-700">Correo de contacto</span>
-                  <input type="email" value={store?.contactEmail || ""} onChange={(event) => store && setStore({ ...store, contactEmail: event.target.value })} className="mt-2 w-full rounded-2xl border border-slate-200 px-4 py-4 outline-none ring-brand-100 focus:ring-4" />
-                </label>
-              </div>
-              <div className="grid gap-4 md:grid-cols-2">
-                <label>
-                  <span className="text-sm font-black text-slate-700">Color principal</span>
-                  <input type="color" value={store?.theme.primaryColor || "#2563eb"} onChange={(event) => store && setStore({ ...store, theme: { ...store.theme, primaryColor: event.target.value } })} className="mt-2 h-14 w-full rounded-2xl border border-slate-200 p-2" />
+                  <input type="email" value={store.contactEmail} onChange={(event) => setStore({ ...store, contactEmail: event.target.value })} className="mt-2 w-full rounded-2xl border border-slate-200 px-4 py-4 outline-none ring-brand-100 focus:ring-4" />
                 </label>
                 <label>
-                  <span className="text-sm font-black text-slate-700">Color acento</span>
-                  <input type="color" value={store?.theme.accentColor || "#10b981"} onChange={(event) => store && setStore({ ...store, theme: { ...store.theme, accentColor: event.target.value } })} className="mt-2 h-14 w-full rounded-2xl border border-slate-200 p-2" />
+                  <span className="text-sm font-black text-slate-700">Telefono / WhatsApp</span>
+                  <input value={store.phone} onChange={(event) => setStore({ ...store, phone: event.target.value })} className="mt-2 w-full rounded-2xl border border-slate-200 px-4 py-4 outline-none ring-brand-100 focus:ring-4" placeholder="+1 555 000 0000" />
                 </label>
               </div>
-              <button onClick={saveStore} disabled={working} className="inline-flex items-center justify-center gap-2 rounded-2xl bg-brand-600 px-5 py-4 font-black text-white hover:bg-brand-700 disabled:opacity-60">
+              <button onClick={() => saveStore(true)} disabled={working} className="mt-5 inline-flex items-center gap-2 rounded-2xl bg-brand-600 px-5 py-4 font-black text-white disabled:opacity-60">
+                {working ? <Loader2 className="animate-spin" /> : <Save />} Guardar perfil
+              </button>
+            </section>
+          )}
+
+          {activeTab === "store" && store && (
+            <section className="rounded-[2rem] bg-white p-6 shadow-soft ring-1 ring-slate-100">
+              <h2 className="text-2xl font-black">Tienda</h2>
+              <div className="mt-5 grid gap-4">
+                <label>
+                  <span className="text-sm font-black text-slate-700">Nombre de la tienda</span>
+                  <input value={store.name} onChange={(event) => setStore({ ...store, name: event.target.value })} className="mt-2 w-full rounded-2xl border border-slate-200 px-4 py-4 outline-none ring-brand-100 focus:ring-4" />
+                </label>
+                <label>
+                  <span className="text-sm font-black text-slate-700">Usuario publico</span>
+                  <input value={store.username} onChange={(event) => setStore({ ...store, username: event.target.value })} className="mt-2 w-full rounded-2xl border border-slate-200 px-4 py-4 outline-none ring-brand-100 focus:ring-4" />
+                </label>
+                <div className="flex flex-col gap-3 rounded-2xl border border-slate-200 p-4 sm:flex-row sm:items-center">
+                  {store.logoUrl ? (
+                    // eslint-disable-next-line @next/next/no-img-element
+                    <img src={store.logoUrl} alt="Logo" className="size-16 rounded-2xl object-cover" />
+                  ) : (
+                    <div className="grid size-16 place-items-center rounded-2xl bg-brand-50 font-black text-brand-600">A</div>
+                  )}
+                  <label className="inline-flex cursor-pointer items-center justify-center gap-2 rounded-2xl bg-slate-950 px-4 py-3 text-sm font-black text-white">
+                    <Upload size={16} /> Subir logo
+                    <input type="file" accept="image/*" className="hidden" onChange={(event) => event.target.files?.[0] && uploadLogo(event.target.files[0])} />
+                  </label>
+                </div>
+                <label>
+                  <span className="text-sm font-black text-slate-700">Descripcion</span>
+                  <textarea value={store.description} onChange={(event) => setStore({ ...store, description: event.target.value })} className="mt-2 min-h-32 w-full rounded-2xl border border-slate-200 px-4 py-4 outline-none ring-brand-100 focus:ring-4" />
+                </label>
+                <div className="grid gap-4 md:grid-cols-2">
+                  <label>
+                    <span className="text-sm font-black text-slate-700">Color principal</span>
+                    <input type="color" value={store.theme.primaryColor} onChange={(event) => setStore({ ...store, theme: { ...store.theme, primaryColor: event.target.value } })} className="mt-2 h-14 w-full rounded-2xl border border-slate-200 p-2" />
+                  </label>
+                  <label>
+                    <span className="text-sm font-black text-slate-700">Color acento</span>
+                    <input type="color" value={store.theme.accentColor} onChange={(event) => setStore({ ...store, theme: { ...store.theme, accentColor: event.target.value } })} className="mt-2 h-14 w-full rounded-2xl border border-slate-200 p-2" />
+                  </label>
+                </div>
+              </div>
+              <button onClick={() => saveStore(true)} disabled={working} className="mt-5 inline-flex items-center gap-2 rounded-2xl bg-brand-600 px-5 py-4 font-black text-white disabled:opacity-60">
                 {working ? <Loader2 className="animate-spin" /> : <Save />} Guardar tienda
               </button>
-            </div>
-          </section>
+            </section>
+          )}
 
-          <section className="rounded-[2rem] bg-slate-950 p-6 text-white shadow-soft">
-            <h2 className="text-2xl font-black">Agregar producto afiliado</h2>
-            <div className="mt-5 grid gap-4">
-              <input value={url} onChange={(event) => setUrl(event.target.value)} className="w-full rounded-2xl border border-white/10 bg-white px-4 py-4 text-slate-950 outline-none" placeholder="https://tienda.com/producto" />
-              <button onClick={analyzeUrl} disabled={working || !url} className="inline-flex items-center justify-center gap-2 rounded-2xl bg-brand-600 px-5 py-4 font-black text-white hover:bg-brand-700 disabled:opacity-60">
-                {working ? <Loader2 className="animate-spin" /> : <WandSparkles />} Analizar enlace
-              </button>
-
-              {result && (
-                <div className="rounded-3xl bg-white p-5 text-slate-950">
-                  <div className="grid gap-4 md:grid-cols-[180px_1fr]">
-                    {/* eslint-disable-next-line @next/next/no-img-element */}
-                    <img src={result.image || "https://images.unsplash.com/photo-1609091839311-d5365f9ff1c5?q=80&w=800"} alt={result.title} className="h-44 w-full rounded-2xl object-cover" />
-                    <div>
-                      <p className="text-xs font-bold uppercase text-slate-400">{result.store}</p>
-                      <h3 className="mt-2 text-xl font-black">{result.title}</h3>
-                      <p className="mt-2 line-clamp-2 text-sm leading-6 text-slate-500">{result.description}</p>
-                      <div className="mt-3 text-2xl font-black">{result.price || "Precio no detectado"}</div>
-                    </div>
-                  </div>
-                  <input value={category} onChange={(event) => setCategory(event.target.value)} className="mt-4 w-full rounded-2xl border border-slate-200 px-4 py-3 outline-none" placeholder="Categoría" />
-                  <button onClick={publishProduct} disabled={working} className="mt-4 inline-flex w-full items-center justify-center gap-2 rounded-2xl bg-emerald-500 px-5 py-4 font-black text-white hover:bg-emerald-600 disabled:opacity-60">
-                    {working ? <Loader2 className="animate-spin" /> : <PackagePlus />} Publicar en mi tienda
+          {activeTab === "products" && (
+            <div className="grid gap-6">
+              <section className="rounded-[2rem] bg-slate-950 p-6 text-white shadow-soft">
+                <h2 className="text-2xl font-black">Agregar producto afiliado</h2>
+                <div className="mt-5 grid gap-4">
+                  <input value={url} onChange={(event) => setUrl(event.target.value)} className="w-full rounded-2xl border border-white/10 bg-white px-4 py-4 text-slate-950 outline-none" placeholder="https://tienda.com/producto" />
+                  <button onClick={analyzeUrl} disabled={working || !url} className="inline-flex items-center justify-center gap-2 rounded-2xl bg-brand-600 px-5 py-4 font-black text-white hover:bg-brand-700 disabled:opacity-60">
+                    {working ? <Loader2 className="animate-spin" /> : <WandSparkles />} Analizar enlace
                   </button>
-                </div>
-              )}
-            </div>
-          </section>
-        </div>
 
-        <section className="mt-8 rounded-[2rem] bg-white p-6 shadow-soft ring-1 ring-slate-100">
-          <div className="flex items-center justify-between gap-4">
-            <h2 className="text-2xl font-black">Mis productos</h2>
-            <span className="rounded-full bg-brand-50 px-4 py-2 text-sm font-black text-brand-600">{products.length} publicados</span>
-          </div>
-          <div className="mt-5 overflow-x-auto">
-            <table className="w-full text-left text-sm">
-              <thead className="text-slate-500">
-                <tr><th className="py-3">Producto</th><th>Categoría</th><th>Precio</th><th>Clics</th></tr>
-              </thead>
-              <tbody>
-                {products.map((product) => (
-                  <tr key={product.id} className="border-t border-slate-100">
-                    <td className="py-4 font-bold">{product.title}</td>
-                    <td>{product.category}</td>
-                    <td>${product.price.toFixed(2)}</td>
-                    <td>{product.clicks}</td>
-                  </tr>
+                  {result && (
+                    <div className="rounded-3xl bg-white p-5 text-slate-950">
+                      <div className="grid gap-4 md:grid-cols-[180px_1fr]">
+                        {/* eslint-disable-next-line @next/next/no-img-element */}
+                        <img src={result.image || "https://images.unsplash.com/photo-1609091839311-d5365f9ff1c5?q=80&w=800"} alt={result.title} className="h-44 w-full rounded-2xl object-cover" />
+                        <div>
+                          <p className="text-xs font-bold uppercase text-slate-400">{result.store}</p>
+                          <h3 className="mt-2 text-xl font-black">{result.title}</h3>
+                          <p className="mt-2 line-clamp-2 text-sm leading-6 text-slate-500">{result.description}</p>
+                          <div className="mt-3 text-2xl font-black">{result.price || "Precio no detectado"}</div>
+                        </div>
+                      </div>
+                      <input value={category} onChange={(event) => setCategory(event.target.value)} className="mt-4 w-full rounded-2xl border border-slate-200 px-4 py-3 outline-none" placeholder="Categoria" />
+                      <button onClick={publishProduct} disabled={working} className="mt-4 inline-flex w-full items-center justify-center gap-2 rounded-2xl bg-emerald-500 px-5 py-4 font-black text-white hover:bg-emerald-600 disabled:opacity-60">
+                        {working ? <Loader2 className="animate-spin" /> : <PackagePlus />} Publicar en mi tienda
+                      </button>
+                    </div>
+                  )}
+                </div>
+              </section>
+
+              <section className="rounded-[2rem] bg-white p-6 shadow-soft ring-1 ring-slate-100">
+                <div className="flex items-center justify-between gap-4">
+                  <h2 className="text-2xl font-black">Mis productos</h2>
+                  <span className="rounded-full bg-brand-50 px-4 py-2 text-sm font-black text-brand-600">{products.length} publicados</span>
+                </div>
+                <ProductTable products={products} publicUsername={store?.username || ""} />
+              </section>
+            </div>
+          )}
+
+          {activeTab === "categories" && (
+            <section className="rounded-[2rem] bg-white p-6 shadow-soft ring-1 ring-slate-100">
+              <h2 className="text-2xl font-black">Categorias</h2>
+              <p className="mt-2 text-sm font-semibold text-slate-500">Por ahora las categorias se crean automaticamente desde los productos publicados.</p>
+              <div className="mt-6 grid gap-3 md:grid-cols-2">
+                {categories.map((item) => (
+                  <div key={item.name} className="flex items-center justify-between rounded-2xl bg-slate-50 p-4">
+                    <div className="font-black">{item.name}</div>
+                    <div className="rounded-full bg-white px-3 py-1 text-xs font-black text-slate-500">{item.count} productos</div>
+                  </div>
                 ))}
-                {!products.length && (
-                  <tr><td colSpan={4} className="py-8 text-center font-semibold text-slate-400">Todavía no tienes productos publicados.</td></tr>
-                )}
-              </tbody>
-            </table>
-          </div>
-        </section>
+                {!categories.length && <div className="rounded-2xl bg-slate-50 p-6 text-center font-semibold text-slate-400 md:col-span-2">Aun no hay categorias.</div>}
+              </div>
+            </section>
+          )}
+
+          {activeTab === "analytics" && (
+            <section className="rounded-[2rem] bg-white p-6 shadow-soft ring-1 ring-slate-100">
+              <h2 className="text-2xl font-black">Analitica</h2>
+              <div className="mt-5 grid gap-4 md:grid-cols-3">
+                <div className="rounded-2xl bg-slate-50 p-5">
+                  <div className="text-sm font-black text-slate-400">Clics totales</div>
+                  <div className="mt-2 text-4xl font-black">{totalClicks}</div>
+                </div>
+                <div className="rounded-2xl bg-slate-50 p-5">
+                  <div className="text-sm font-black text-slate-400">Productos</div>
+                  <div className="mt-2 text-4xl font-black">{products.length}</div>
+                </div>
+                <div className="rounded-2xl bg-slate-50 p-5">
+                  <div className="text-sm font-black text-slate-400">Mas clicado</div>
+                  <div className="mt-2 line-clamp-2 text-lg font-black">{topProduct?.title || "Sin datos"}</div>
+                </div>
+              </div>
+              <ProductTable products={products} publicUsername={store?.username || ""} compact />
+            </section>
+          )}
+        </div>
       </section>
     </main>
+  );
+}
+
+function ProductTable({ products, publicUsername, compact = false }: { products: Product[]; publicUsername: string; compact?: boolean }) {
+  return (
+    <div className="mt-5 overflow-x-auto">
+      <table className="w-full text-left text-sm">
+        <thead className="text-slate-500">
+          <tr>
+            <th className="py-3">Producto</th>
+            <th>Categoria</th>
+            <th>Precio</th>
+            <th>Clics</th>
+            {!compact && <th>Link</th>}
+          </tr>
+        </thead>
+        <tbody>
+          {products.map((product) => (
+            <tr key={product.id} className="border-t border-slate-100">
+              <td className="py-4 font-bold">{product.title}</td>
+              <td>{product.category}</td>
+              <td>${product.price.toFixed(2)}</td>
+              <td>{product.clicks}</td>
+              {!compact && (
+                <td>
+                  <Link href={`/${publicUsername}/product/${product.slug}`} target="_blank" className="font-black text-brand-600">Ver</Link>
+                </td>
+              )}
+            </tr>
+          ))}
+          {!products.length && (
+            <tr><td colSpan={compact ? 4 : 5} className="py-8 text-center font-semibold text-slate-400">Todavia no tienes productos publicados.</td></tr>
+          )}
+        </tbody>
+      </table>
+    </div>
   );
 }

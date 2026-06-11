@@ -91,6 +91,7 @@ export default function SetupPage() {
 
     try {
       await updateStore(user.uid, {
+        ownerName: store.ownerName,
         name: store.name,
         username: store.username,
         logoUrl: store.logoUrl,

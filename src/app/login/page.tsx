@@ -6,11 +6,12 @@ import { useRouter } from "next/navigation";
 import {
   createUserWithEmailAndPassword,
   GoogleAuthProvider,
+  onAuthStateChanged,
   signInWithEmailAndPassword,
   signInWithPopup,
   updateProfile
 } from "firebase/auth";
-import { auth } from "@/lib/firebase";
+import { auth, keepSessionInBrowser } from "@/lib/firebase";
 import { createDefaultStore, getStoreByOwnerId } from "@/lib/stores";
 import { Loader2, LogIn, UserPlus } from "lucide-react";
 
@@ -29,6 +30,19 @@ export default function LoginPage() {
     if (params.get("mode") === "register") setMode("register");
   }, []);
 
+  useEffect(() => {
+    if (!auth) return;
+
+    keepSessionInBrowser();
+
+    return onAuthStateChanged(auth, async (currentUser) => {
+      if (!currentUser) return;
+
+      const existingStore = await getStoreByOwnerId(currentUser.uid);
+      router.replace(existingStore?.setupComplete ? "/dashboard" : "/setup");
+    });
+  }, [router]);
+
   async function submitForm(event: React.FormEvent<HTMLFormElement>) {
     event.preventDefault();
     if (!auth) return setError("Firebase no está configurado");
@@ -37,17 +51,19 @@ export default function LoginPage() {
     setError("");
 
     try {
+      await keepSessionInBrowser();
+
       if (mode === "register") {
         const credential = await createUserWithEmailAndPassword(auth, email, password);
         await updateProfile(credential.user, { displayName: name });
         await createDefaultStore(credential.user.uid, credential.user.email || email, username, name);
-        router.push("/setup");
+        router.replace("/setup");
         return;
       } else {
         await signInWithEmailAndPassword(auth, email, password);
       }
 
-      router.push("/dashboard");
+      router.replace("/dashboard");
     } catch (err) {
       setError(err instanceof Error ? err.message : "No se pudo entrar");
     } finally {
@@ -62,6 +78,7 @@ export default function LoginPage() {
     setError("");
 
     try {
+      await keepSessionInBrowser();
       const credential = await signInWithPopup(auth, new GoogleAuthProvider());
       const existingStore = await getStoreByOwnerId(credential.user.uid);
 
@@ -72,11 +89,11 @@ export default function LoginPage() {
           credential.user.email?.split("@")[0],
           credential.user.displayName || "Vendedor"
         );
-        router.push("/setup");
+        router.replace("/setup");
         return;
       }
 
-      router.push(existingStore.setupComplete ? "/dashboard" : "/setup");
+      router.replace(existingStore.setupComplete ? "/dashboard" : "/setup");
     } catch (err) {
       setError(err instanceof Error ? err.message : "No se pudo continuar con Google");
     } finally {

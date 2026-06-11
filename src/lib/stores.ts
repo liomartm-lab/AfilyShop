@@ -34,6 +34,7 @@ export type StoreProfile = {
 };
 
 export type StoreInput = {
+  ownerName?: string;
   name: string;
   username: string;
   logoUrl: string;
@@ -164,6 +165,7 @@ export async function updateStore(ownerId: string, input: StoreInput) {
 
   await updateDoc(doc(db, "stores", ownerId), {
     name: input.name,
+    ownerName: input.ownerName,
     username,
     logoUrl: input.logoUrl,
     description: input.description,

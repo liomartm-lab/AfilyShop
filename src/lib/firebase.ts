@@ -1,5 +1,5 @@
 import { getApps, initializeApp } from "firebase/app";
-import { getAuth } from "firebase/auth";
+import { browserLocalPersistence, getAuth, setPersistence } from "firebase/auth";
 import { getFirestore } from "firebase/firestore/lite";
 import { getStorage } from "firebase/storage";
 
@@ -27,3 +27,8 @@ export const firebaseApp = isFirebaseConfigured
 export const db = firebaseApp ? getFirestore(firebaseApp) : null;
 export const auth = firebaseApp ? getAuth(firebaseApp) : null;
 export const storage = firebaseApp ? getStorage(firebaseApp) : null;
+
+export async function keepSessionInBrowser() {
+  if (!auth || typeof window === "undefined") return;
+  await setPersistence(auth, browserLocalPersistence);
+}
