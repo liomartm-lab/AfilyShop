@@ -33,6 +33,8 @@ type AnalyzeResult = {
   originalUrl: string;
   affiliateUrl: string;
   store: string;
+  blocked?: boolean;
+  warning?: string;
 };
 
 type DashboardTab = "overview" | "profile" | "store" | "products" | "categories" | "analytics";
@@ -411,17 +413,44 @@ export default function DashboardPage() {
 
                   {result && (
                     <div className="rounded-3xl bg-white p-5 text-slate-950">
+                      {result.warning && (
+                        <div className="mb-4 rounded-2xl bg-amber-50 p-4 text-sm font-semibold text-amber-800 ring-1 ring-amber-100">
+                          {result.warning}
+                        </div>
+                      )}
                       <div className="grid gap-4 md:grid-cols-[180px_1fr]">
                         {/* eslint-disable-next-line @next/next/no-img-element */}
                         <img src={result.image || "https://images.unsplash.com/photo-1609091839311-d5365f9ff1c5?q=80&w=800"} alt={result.title} className="h-44 w-full rounded-2xl object-cover" />
                         <div>
                           <p className="text-xs font-bold uppercase text-slate-400">{result.store}</p>
-                          <h3 className="mt-2 text-xl font-black">{result.title}</h3>
-                          <p className="mt-2 line-clamp-2 text-sm leading-6 text-slate-500">{result.description}</p>
-                          <div className="mt-3 text-2xl font-black">{result.price || "Precio no detectado"}</div>
+                          <label className="mt-2 block">
+                            <span className="text-xs font-black text-slate-500">Titulo</span>
+                            <input value={result.title} onChange={(event) => setResult({ ...result, title: event.target.value })} className="mt-1 w-full rounded-2xl border border-slate-200 px-4 py-3 font-black outline-none ring-brand-100 focus:ring-4" />
+                          </label>
+                          <label className="mt-3 block">
+                            <span className="text-xs font-black text-slate-500">Descripcion</span>
+                            <textarea value={result.description} onChange={(event) => setResult({ ...result, description: event.target.value })} className="mt-1 min-h-24 w-full rounded-2xl border border-slate-200 px-4 py-3 text-sm leading-6 outline-none ring-brand-100 focus:ring-4" />
+                          </label>
                         </div>
                       </div>
-                      <input value={category} onChange={(event) => setCategory(event.target.value)} className="mt-4 w-full rounded-2xl border border-slate-200 px-4 py-3 outline-none" placeholder="Categoria" />
+                      <div className="mt-4 grid gap-3 md:grid-cols-3">
+                        <label>
+                          <span className="text-xs font-black text-slate-500">Precio</span>
+                          <input value={result.price || ""} onChange={(event) => setResult({ ...result, price: event.target.value || null })} className="mt-1 w-full rounded-2xl border border-slate-200 px-4 py-3 outline-none ring-brand-100 focus:ring-4" placeholder="99.99" />
+                        </label>
+                        <label>
+                          <span className="text-xs font-black text-slate-500">Categoria</span>
+                          <input value={category} onChange={(event) => setCategory(event.target.value)} className="mt-1 w-full rounded-2xl border border-slate-200 px-4 py-3 outline-none ring-brand-100 focus:ring-4" placeholder="Categoria" />
+                        </label>
+                        <label>
+                          <span className="text-xs font-black text-slate-500">Imagen URL</span>
+                          <input value={result.image} onChange={(event) => setResult({ ...result, image: event.target.value })} className="mt-1 w-full rounded-2xl border border-slate-200 px-4 py-3 outline-none ring-brand-100 focus:ring-4" placeholder="https://..." />
+                        </label>
+                      </div>
+                      <label className="mt-3 block">
+                        <span className="text-xs font-black text-slate-500">Link afiliado final</span>
+                        <input value={result.affiliateUrl} onChange={(event) => setResult({ ...result, affiliateUrl: event.target.value })} className="mt-1 w-full rounded-2xl border border-slate-200 px-4 py-3 outline-none ring-brand-100 focus:ring-4" />
+                      </label>
                       <button onClick={publishProduct} disabled={working} className="mt-4 inline-flex w-full items-center justify-center gap-2 rounded-2xl bg-emerald-500 px-5 py-4 font-black text-white hover:bg-emerald-600 disabled:opacity-60">
                         {working ? <Loader2 className="animate-spin" /> : <PackagePlus />} Publicar en mi tienda
                       </button>

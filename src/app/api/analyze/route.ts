@@ -5,6 +5,29 @@ import { buildAffiliateUrl } from "@/lib/affiliate";
 
 const bodySchema = z.object({ url: z.string().url() });
 
+function fallbackProduct(originalUrl: string, reason: string) {
+  const url = new URL(originalUrl);
+  const store = url.hostname.replace("www.", "");
+  const readableSlug = url.pathname
+    .split("/")
+    .filter(Boolean)
+    .pop()
+    ?.replace(/[-_]+/g, " ")
+    .replace(/\b\w/g, (letter) => letter.toUpperCase());
+
+  return {
+    title: readableSlug || `Producto de ${store}`,
+    description: "La tienda bloqueó la lectura automática. Completa o edita esta ficha manualmente antes de publicarla.",
+    image: "",
+    price: null,
+    originalUrl,
+    affiliateUrl: buildAffiliateUrl(originalUrl),
+    store,
+    blocked: true,
+    warning: reason
+  };
+}
+
 function readMeta($: cheerio.CheerioAPI, selectors: string[]) {
   for (const selector of selectors) {
     const value = $(selector).attr("content") || $(selector).text();
@@ -19,13 +42,15 @@ export async function POST(request: Request) {
     const response = await fetch(body.url, {
       headers: {
         "User-Agent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/125.0.0.0 Safari/537.36",
-        "Accept-Language": "es,en;q=0.9"
+        "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,*/*;q=0.8",
+        "Accept-Language": "es,en;q=0.9",
+        "Referer": new URL(body.url).origin
       },
       cache: "no-store"
     });
 
     if (!response.ok) {
-      return NextResponse.json({ error: `La tienda respondió con error ${response.status}` }, { status: 400 });
+      return NextResponse.json(fallbackProduct(body.url, `La tienda respondió con error ${response.status}. Puedes publicar el producto completando los datos manualmente.`));
     }
 
     const html = await response.text();
