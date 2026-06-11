@@ -8,6 +8,9 @@ export type Product = {
   price: number;
   currency: string;
   imageUrl: string;
+  images?: string[];
+  stock?: string;
+  deliveryTime?: string;
   category: string;
   store: string;
   originalUrl: string;

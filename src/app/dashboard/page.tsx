@@ -29,7 +29,10 @@ type AnalyzeResult = {
   title: string;
   description: string;
   image: string;
+  images?: string[];
   price: string | null;
+  stock?: string;
+  deliveryTime?: string;
   originalUrl: string;
   affiliateUrl: string;
   store: string;
@@ -447,6 +450,20 @@ export default function DashboardPage() {
                           <input value={result.image} onChange={(event) => setResult({ ...result, image: event.target.value })} className="mt-1 w-full rounded-2xl border border-slate-200 px-4 py-3 outline-none ring-brand-100 focus:ring-4" placeholder="https://..." />
                         </label>
                       </div>
+                      <div className="mt-4 grid gap-3 md:grid-cols-2">
+                        <label>
+                          <span className="text-xs font-black text-slate-500">Stock</span>
+                          <input value={result.stock || ""} onChange={(event) => setResult({ ...result, stock: event.target.value })} className="mt-1 w-full rounded-2xl border border-slate-200 px-4 py-3 outline-none ring-brand-100 focus:ring-4" placeholder="En existencia" />
+                        </label>
+                        <label>
+                          <span className="text-xs font-black text-slate-500">Tiempo de entrega</span>
+                          <input value={result.deliveryTime || ""} onChange={(event) => setResult({ ...result, deliveryTime: event.target.value })} className="mt-1 w-full rounded-2xl border border-slate-200 px-4 py-3 outline-none ring-brand-100 focus:ring-4" placeholder="Entrega estimada" />
+                        </label>
+                      </div>
+                      <label className="mt-3 block">
+                        <span className="text-xs font-black text-slate-500">Fotos adicionales, una URL por linea</span>
+                        <textarea value={(result.images || []).join("\n")} onChange={(event) => setResult({ ...result, images: event.target.value.split("\n").map((item) => item.trim()).filter(Boolean) })} className="mt-1 min-h-24 w-full rounded-2xl border border-slate-200 px-4 py-3 text-sm outline-none ring-brand-100 focus:ring-4" />
+                      </label>
                       <label className="mt-3 block">
                         <span className="text-xs font-black text-slate-500">Link afiliado final</span>
                         <input value={result.affiliateUrl} onChange={(event) => setResult({ ...result, affiliateUrl: event.target.value })} className="mt-1 w-full rounded-2xl border border-slate-200 px-4 py-3 outline-none ring-brand-100 focus:ring-4" />

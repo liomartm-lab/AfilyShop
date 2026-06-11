@@ -19,7 +19,10 @@ export type ProductInput = {
   title: string;
   description: string;
   image: string;
+  images?: string[];
   price: string | null;
+  stock?: string;
+  deliveryTime?: string;
   originalUrl: string;
   affiliateUrl: string;
   store: string;
@@ -37,6 +40,9 @@ function productFromDoc(id: string, data: Record<string, unknown>): Product {
     price: typeof data.price === "number" ? data.price : 0,
     currency: String(data.currency || "USD"),
     imageUrl: String(data.imageUrl || ""),
+    images: Array.isArray(data.images) ? data.images.map(String) : [],
+    stock: typeof data.stock === "string" ? data.stock : "",
+    deliveryTime: typeof data.deliveryTime === "string" ? data.deliveryTime : "",
     category: String(data.category || "Sin categoría"),
     store: String(data.store || "Tienda externa"),
     originalUrl: String(data.originalUrl || ""),
@@ -136,6 +142,9 @@ export async function createProduct(input: ProductInput) {
     price: parsePrice(input.price),
     currency: "USD",
     imageUrl: input.image,
+    images: input.images || (input.image ? [input.image] : []),
+    stock: input.stock || "",
+    deliveryTime: input.deliveryTime || "",
     originalUrl: input.originalUrl,
     affiliateUrl: input.affiliateUrl,
     store: input.store,

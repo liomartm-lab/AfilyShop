@@ -22,6 +22,12 @@ export function ProductCard({ product, productPath }: { product: Product; produc
           <h3 className="line-clamp-2 text-lg font-black text-slate-950">{product.title}</h3>
         </Link>
         <p className="mt-2 line-clamp-2 text-sm leading-6 text-slate-500">{product.description}</p>
+        {(product.stock || product.deliveryTime) && (
+          <div className="mt-3 grid gap-1 text-xs font-bold text-slate-500">
+            {product.stock && <span>{product.stock}</span>}
+            {product.deliveryTime && <span>{product.deliveryTime}</span>}
+          </div>
+        )}
         <div className="mt-5 flex items-center justify-between gap-4">
           <strong className="text-2xl text-slate-950">${product.price.toFixed(2)}</strong>
           <Link href={`/go/${product.id}`} className="inline-flex items-center gap-2 rounded-xl bg-brand-600 px-4 py-3 text-sm font-black text-white hover:bg-brand-700">
