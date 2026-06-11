@@ -54,11 +54,13 @@ export default async function PublicStoreProductPage({ params }: { params: Promi
               {product.deliveryTime && <div>Entrega: {product.deliveryTime}</div>}
             </div>
           )}
-          <Link href={`/go/${product.id}`} className="mt-8 inline-flex w-full items-center justify-center gap-2 rounded-2xl px-6 py-4 text-lg font-black text-white md:w-auto" style={{ background: store.theme.primaryColor }}>
-            Comprar ahora <ExternalLink />
-          </Link>
+          {product.productType !== "physical" && (
+            <Link href={`/go/${product.id}`} className="mt-8 inline-flex w-full items-center justify-center gap-2 rounded-2xl px-6 py-4 text-lg font-black text-white md:w-auto" style={{ background: store.theme.primaryColor }}>
+              Comprar ahora <ExternalLink />
+            </Link>
+          )}
           {whatsappPhone && (
-            <a href={`https://wa.me/${whatsappPhone}?text=${whatsappText}`} target="_blank" className="mt-3 inline-flex w-full items-center justify-center gap-2 rounded-2xl bg-emerald-500 px-6 py-4 text-lg font-black text-white md:ml-3 md:w-auto">
+            <a href={`https://wa.me/${whatsappPhone}?text=${whatsappText}`} target="_blank" className={`mt-3 inline-flex w-full items-center justify-center gap-2 rounded-2xl bg-emerald-500 px-6 py-4 text-lg font-black text-white md:w-auto ${product.productType !== "physical" ? "md:ml-3" : ""}`}>
               Consultar por WhatsApp <MessageCircle />
             </a>
           )}

@@ -2,6 +2,7 @@ export type Product = {
   id: string;
   ownerId?: string;
   storeId?: string;
+  productType?: "affiliate" | "physical";
   title: string;
   slug: string;
   description: string;

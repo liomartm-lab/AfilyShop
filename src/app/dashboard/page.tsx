@@ -4,18 +4,23 @@ import { useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { onAuthStateChanged, signOut, type User } from "firebase/auth";
+import { addDoc, collection, getDocs, query, serverTimestamp, where } from "firebase/firestore/lite";
 import { getDownloadURL, ref, uploadBytes } from "firebase/storage";
 import type { Product } from "@/data/products";
-import { auth, keepSessionInBrowser, storage } from "@/lib/firebase";
-import { createProduct, getProductsByOwner } from "@/lib/products";
-import { createDefaultStore, getStoreByOwnerId, updateStore, type StoreProfile } from "@/lib/stores";
+import { auth, db, keepSessionInBrowser, storage } from "@/lib/firebase";
+import { createProduct, getProductsByOwner, updateProductCategory } from "@/lib/products";
+import { createDefaultStore, getStoreByOwnerId, updateStore, type StoreCategory, type StoreProfile } from "@/lib/stores";
 import {
   BarChart3,
   Boxes,
+  Copy,
   ExternalLink,
+  Grid2X2,
   LayoutDashboard,
+  List,
   Loader2,
   LogOut,
+  Megaphone,
   PackagePlus,
   Palette,
   Save,
@@ -40,7 +45,15 @@ type AnalyzeResult = {
   warning?: string;
 };
 
-type DashboardTab = "overview" | "profile" | "store" | "products" | "categories" | "analytics";
+type Customer = {
+  id: string;
+  name: string;
+  phone: string;
+  email: string;
+  interest: string;
+};
+
+type DashboardTab = "overview" | "profile" | "store" | "products" | "categories" | "marketing" | "analytics";
 
 const tabs: Array<{ id: DashboardTab; label: string; icon: typeof LayoutDashboard }> = [
   { id: "overview", label: "Resumen", icon: LayoutDashboard },
@@ -48,6 +61,7 @@ const tabs: Array<{ id: DashboardTab; label: string; icon: typeof LayoutDashboar
   { id: "store", label: "Tienda", icon: Palette },
   { id: "products", label: "Productos", icon: Boxes },
   { id: "categories", label: "Categorias", icon: Tags },
+  { id: "marketing", label: "Marketing", icon: Megaphone },
   { id: "analytics", label: "Analitica", icon: BarChart3 }
 ];
 
@@ -57,9 +71,22 @@ export default function DashboardPage() {
   const [user, setUser] = useState<User | null>(null);
   const [store, setStore] = useState<StoreProfile | null>(null);
   const [products, setProducts] = useState<Product[]>([]);
+  const [customers, setCustomers] = useState<Customer[]>([]);
+  const [productView, setProductView] = useState<"list" | "grid">("grid");
+  const [productMode, setProductMode] = useState<"affiliate" | "physical">("affiliate");
   const [url, setUrl] = useState("");
   const [result, setResult] = useState<AnalyzeResult | null>(null);
   const [category, setCategory] = useState("General");
+  const [newCategory, setNewCategory] = useState({ name: "", icon: "tag", imageUrl: "" });
+  const [newCustomer, setNewCustomer] = useState({ name: "", phone: "", email: "", interest: "" });
+  const [physicalProduct, setPhysicalProduct] = useState({
+    title: "",
+    description: "",
+    price: "",
+    image: "",
+    stock: "En existencia",
+    deliveryTime: ""
+  });
   const [loading, setLoading] = useState(true);
   const [working, setWorking] = useState(false);
   const [error, setError] = useState("");
@@ -93,6 +120,23 @@ export default function DashboardPage() {
 
     setStore(currentStore);
     setProducts(await getProductsByOwner(currentUser.uid));
+    await loadCustomers(currentUser.uid);
+  }
+
+  async function loadCustomers(ownerId: string) {
+    if (!db) return;
+
+    const snapshot = await getDocs(query(collection(db, "customers"), where("ownerId", "==", ownerId)));
+    setCustomers(snapshot.docs.map((item) => {
+      const data = item.data();
+      return {
+        id: item.id,
+        name: String(data.name || ""),
+        phone: String(data.phone || ""),
+        email: String(data.email || ""),
+        interest: String(data.interest || "")
+      };
+    }));
   }
 
   useEffect(() => {
@@ -122,8 +166,9 @@ export default function DashboardPage() {
     });
   }, [router]);
 
-  async function saveStore(nextSetupComplete = store?.setupComplete || false) {
-    if (!user || !store) return;
+  async function saveStore(nextSetupComplete = store?.setupComplete || false, storeOverride?: StoreProfile) {
+    const storeToSave = storeOverride || store;
+    if (!user || !storeToSave) return;
 
     setWorking(true);
     setError("");
@@ -131,14 +176,15 @@ export default function DashboardPage() {
 
     try {
       const updated = await updateStore(user.uid, {
-        ownerName: store.ownerName,
-        name: store.name,
-        username: store.username,
-        logoUrl: store.logoUrl,
-        description: store.description,
-        contactEmail: store.contactEmail,
-        phone: store.phone,
-        theme: store.theme,
+        ownerName: storeToSave.ownerName,
+        name: storeToSave.name,
+        username: storeToSave.username,
+        logoUrl: storeToSave.logoUrl,
+        description: storeToSave.description,
+        contactEmail: storeToSave.contactEmail,
+        phone: storeToSave.phone,
+        theme: storeToSave.theme,
+        categories: storeToSave.categories,
         setupComplete: nextSetupComplete
       });
 
@@ -219,6 +265,102 @@ export default function DashboardPage() {
     } finally {
       setWorking(false);
     }
+  }
+
+  async function publishPhysicalProduct() {
+    if (!user || !store || !physicalProduct.title) return;
+
+    setWorking(true);
+    setError("");
+    setMessage("");
+
+    try {
+      await createProduct({
+        productType: "physical",
+        ownerId: user.uid,
+        storeId: store.id,
+        title: physicalProduct.title,
+        description: physicalProduct.description,
+        image: physicalProduct.image,
+        images: physicalProduct.image ? [physicalProduct.image] : [],
+        price: physicalProduct.price || null,
+        stock: physicalProduct.stock,
+        deliveryTime: physicalProduct.deliveryTime,
+        originalUrl: publicUrl || "https://afilyshop.local",
+        affiliateUrl: publicUrl || "https://afilyshop.local",
+        store: store.name,
+        category
+      });
+
+      setProducts(await getProductsByOwner(user.uid));
+      setPhysicalProduct({ title: "", description: "", price: "", image: "", stock: "En existencia", deliveryTime: "" });
+      setMessage("Producto fisico publicado.");
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "No se pudo publicar el producto fisico");
+    } finally {
+      setWorking(false);
+    }
+  }
+
+  async function addCategory() {
+    if (!store || !newCategory.name.trim()) return;
+
+    const category: StoreCategory = {
+      id: crypto.randomUUID(),
+      name: newCategory.name.trim(),
+      icon: newCategory.icon,
+      imageUrl: newCategory.imageUrl
+    };
+
+    const updatedStore = { ...store, categories: [...store.categories, category] };
+    setStore(updatedStore);
+    setNewCategory({ name: "", icon: "tag", imageUrl: "" });
+    await saveStore(true, updatedStore);
+  }
+
+  async function moveProductToCategory(productId: string, categoryName: string) {
+    setWorking(true);
+    setError("");
+    setMessage("");
+
+    try {
+      await updateProductCategory(productId, categoryName);
+      if (user) setProducts(await getProductsByOwner(user.uid));
+      setMessage(`Producto movido a ${categoryName}.`);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "No se pudo mover el producto");
+    } finally {
+      setWorking(false);
+    }
+  }
+
+  async function addCustomer() {
+    if (!user || !db || !newCustomer.name.trim()) return;
+
+    setWorking(true);
+    setError("");
+    setMessage("");
+
+    try {
+      await addDoc(collection(db, "customers"), {
+        ownerId: user.uid,
+        storeId: store?.id || user.uid,
+        ...newCustomer,
+        createdAt: serverTimestamp()
+      });
+      await loadCustomers(user.uid);
+      setNewCustomer({ name: "", phone: "", email: "", interest: "" });
+      setMessage("Cliente guardado.");
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "No se pudo guardar el cliente");
+    } finally {
+      setWorking(false);
+    }
+  }
+
+  async function copyText(value: string) {
+    await navigator.clipboard.writeText(value);
+    setMessage("Link copiado.");
   }
 
   async function logout() {
@@ -397,6 +539,32 @@ export default function DashboardPage() {
                     <input type="color" value={store.theme.accentColor} onChange={(event) => setStore({ ...store, theme: { ...store.theme, accentColor: event.target.value } })} className="mt-2 h-14 w-full rounded-2xl border border-slate-200 p-2" />
                   </label>
                 </div>
+                <div className="grid gap-4 md:grid-cols-3">
+                  <label>
+                    <span className="text-sm font-black text-slate-700">Tipografía</span>
+                    <select value={store.theme.font} onChange={(event) => setStore({ ...store, theme: { ...store.theme, font: event.target.value } })} className="mt-2 w-full rounded-2xl border border-slate-200 px-4 py-4 outline-none">
+                      <option value="Inter">Inter</option>
+                      <option value="System">System</option>
+                      <option value="Serif">Serif premium</option>
+                    </select>
+                  </label>
+                  <label>
+                    <span className="text-sm font-black text-slate-700">Diseño</span>
+                    <select value={store.theme.layout} onChange={(event) => setStore({ ...store, theme: { ...store.theme, layout: event.target.value } })} className="mt-2 w-full rounded-2xl border border-slate-200 px-4 py-4 outline-none">
+                      <option value="grid">Cuadrícula</option>
+                      <option value="editorial">Editorial</option>
+                      <option value="compact">Compacto</option>
+                    </select>
+                  </label>
+                  <label>
+                    <span className="text-sm font-black text-slate-700">Textura</span>
+                    <select value={store.theme.texture} onChange={(event) => setStore({ ...store, theme: { ...store.theme, texture: event.target.value } })} className="mt-2 w-full rounded-2xl border border-slate-200 px-4 py-4 outline-none">
+                      <option value="clean">Limpio</option>
+                      <option value="paper">Papel suave</option>
+                      <option value="grid">Malla sutil</option>
+                    </select>
+                  </label>
+                </div>
               </div>
               <button onClick={() => saveStore(true)} disabled={working} className="mt-5 inline-flex items-center gap-2 rounded-2xl bg-brand-600 px-5 py-4 font-black text-white disabled:opacity-60">
                 {working ? <Loader2 className="animate-spin" /> : <Save />} Guardar tienda
@@ -406,13 +574,44 @@ export default function DashboardPage() {
 
           {activeTab === "products" && (
             <div className="grid gap-6">
-              <section className="rounded-[2rem] bg-slate-950 p-6 text-white shadow-soft">
-                <h2 className="text-2xl font-black">Agregar producto afiliado</h2>
+              <section className="rounded-[2rem] bg-white p-6 shadow-soft ring-1 ring-slate-100">
+                <div className="flex flex-col justify-between gap-4 md:flex-row md:items-center">
+                  <div>
+                    <h2 className="text-2xl font-black">Agregar producto</h2>
+                    <p className="mt-1 text-sm font-semibold text-slate-500">Crea productos afiliados desde un link o productos físicos propios.</p>
+                  </div>
+                  <div className="flex rounded-2xl bg-slate-100 p-1">
+                    <button onClick={() => setProductMode("affiliate")} className={`rounded-xl px-4 py-2 text-sm font-black ${productMode === "affiliate" ? "bg-white shadow-sm" : "text-slate-500"}`}>Afiliado</button>
+                    <button onClick={() => setProductMode("physical")} className={`rounded-xl px-4 py-2 text-sm font-black ${productMode === "physical" ? "bg-white shadow-sm" : "text-slate-500"}`}>Fisico</button>
+                  </div>
+                </div>
+
                 <div className="mt-5 grid gap-4">
-                  <input value={url} onChange={(event) => setUrl(event.target.value)} className="w-full rounded-2xl border border-white/10 bg-white px-4 py-4 text-slate-950 outline-none" placeholder="https://tienda.com/producto" />
-                  <button onClick={analyzeUrl} disabled={working || !url} className="inline-flex items-center justify-center gap-2 rounded-2xl bg-brand-600 px-5 py-4 font-black text-white hover:bg-brand-700 disabled:opacity-60">
-                    {working ? <Loader2 className="animate-spin" /> : <WandSparkles />} Analizar enlace
-                  </button>
+                  {productMode === "affiliate" ? (
+                    <>
+                      <input value={url} onChange={(event) => setUrl(event.target.value)} className="w-full rounded-2xl border border-slate-200 bg-white px-4 py-4 text-slate-950 outline-none ring-brand-100 focus:ring-4" placeholder="https://tienda.com/producto" />
+                      <button onClick={analyzeUrl} disabled={working || !url} className="inline-flex items-center justify-center gap-2 rounded-2xl bg-brand-600 px-5 py-4 font-black text-white hover:bg-brand-700 disabled:opacity-60">
+                        {working ? <Loader2 className="animate-spin" /> : <WandSparkles />} Analizar enlace
+                      </button>
+                    </>
+                  ) : (
+                    <div className="grid gap-3">
+                      <input value={physicalProduct.title} onChange={(event) => setPhysicalProduct({ ...physicalProduct, title: event.target.value })} className="rounded-2xl border border-slate-200 px-4 py-4 outline-none ring-brand-100 focus:ring-4" placeholder="Nombre del producto" />
+                      <textarea value={physicalProduct.description} onChange={(event) => setPhysicalProduct({ ...physicalProduct, description: event.target.value })} className="min-h-24 rounded-2xl border border-slate-200 px-4 py-4 outline-none ring-brand-100 focus:ring-4" placeholder="Descripción" />
+                      <div className="grid gap-3 md:grid-cols-3">
+                        <input value={physicalProduct.price} onChange={(event) => setPhysicalProduct({ ...physicalProduct, price: event.target.value })} className="rounded-2xl border border-slate-200 px-4 py-4 outline-none ring-brand-100 focus:ring-4" placeholder="Precio" />
+                        <input value={category} onChange={(event) => setCategory(event.target.value)} className="rounded-2xl border border-slate-200 px-4 py-4 outline-none ring-brand-100 focus:ring-4" placeholder="Categoría" />
+                        <input value={physicalProduct.stock} onChange={(event) => setPhysicalProduct({ ...physicalProduct, stock: event.target.value })} className="rounded-2xl border border-slate-200 px-4 py-4 outline-none ring-brand-100 focus:ring-4" placeholder="Stock" />
+                      </div>
+                      <div className="grid gap-3 md:grid-cols-2">
+                        <input value={physicalProduct.image} onChange={(event) => setPhysicalProduct({ ...physicalProduct, image: event.target.value })} className="rounded-2xl border border-slate-200 px-4 py-4 outline-none ring-brand-100 focus:ring-4" placeholder="URL de imagen" />
+                        <input value={physicalProduct.deliveryTime} onChange={(event) => setPhysicalProduct({ ...physicalProduct, deliveryTime: event.target.value })} className="rounded-2xl border border-slate-200 px-4 py-4 outline-none ring-brand-100 focus:ring-4" placeholder="Entrega" />
+                      </div>
+                      <button onClick={publishPhysicalProduct} disabled={working || !physicalProduct.title} className="inline-flex items-center justify-center gap-2 rounded-2xl bg-slate-950 px-5 py-4 font-black text-white disabled:opacity-60">
+                        {working ? <Loader2 className="animate-spin" /> : <PackagePlus />} Publicar producto fisico
+                      </button>
+                    </div>
+                  )}
 
                   {result && (
                     <div className="rounded-3xl bg-white p-5 text-slate-950">
@@ -477,11 +676,35 @@ export default function DashboardPage() {
               </section>
 
               <section className="rounded-[2rem] bg-white p-6 shadow-soft ring-1 ring-slate-100">
-                <div className="flex items-center justify-between gap-4">
-                  <h2 className="text-2xl font-black">Mis productos</h2>
-                  <span className="rounded-full bg-brand-50 px-4 py-2 text-sm font-black text-brand-600">{products.length} publicados</span>
+                <div className="flex flex-col justify-between gap-4 md:flex-row md:items-center">
+                  <div>
+                    <h2 className="text-2xl font-black">Mis productos</h2>
+                    <p className="mt-1 text-sm font-semibold text-slate-500">Arrastra un producto encima de una categoría para moverlo.</p>
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <button onClick={() => setProductView("grid")} className={`grid size-10 place-items-center rounded-xl ${productView === "grid" ? "bg-slate-950 text-white" : "bg-slate-100 text-slate-500"}`}><Grid2X2 size={18} /></button>
+                    <button onClick={() => setProductView("list")} className={`grid size-10 place-items-center rounded-xl ${productView === "list" ? "bg-slate-950 text-white" : "bg-slate-100 text-slate-500"}`}><List size={18} /></button>
+                    <span className="rounded-full bg-brand-50 px-4 py-2 text-sm font-black text-brand-600">{products.length}</span>
+                  </div>
                 </div>
-                <ProductTable products={products} publicUsername={store?.username || ""} />
+                {productView === "list" ? (
+                  <ProductTable products={products} publicUsername={store?.username || ""} onCopy={copyText} />
+                ) : (
+                  <div className="mt-5 grid gap-4 md:grid-cols-2 xl:grid-cols-3">
+                    {products.map((product) => (
+                      <article key={product.id} draggable onDragStart={(event) => event.dataTransfer.setData("productId", product.id)} className="rounded-2xl border border-slate-100 bg-slate-50 p-4">
+                        {/* eslint-disable-next-line @next/next/no-img-element */}
+                        <img src={product.imageUrl || "/afilyshop-icon.png"} alt={product.title} className="h-36 w-full rounded-xl object-cover" />
+                        <div className="mt-3 text-xs font-black uppercase text-slate-400">{product.productType === "physical" ? "Fisico" : "Afiliado"} · {product.category}</div>
+                        <h3 className="mt-1 line-clamp-2 font-black">{product.title}</h3>
+                        <div className="mt-3 flex items-center justify-between">
+                          <span className="text-lg font-black">${product.price.toFixed(2)}</span>
+                          <button onClick={() => copyText(`${window.location.origin}/${store?.username}/product/${product.slug}`)} className="grid size-9 place-items-center rounded-xl bg-white text-slate-600 ring-1 ring-slate-200"><Copy size={16} /></button>
+                        </div>
+                      </article>
+                    ))}
+                  </div>
+                )}
               </section>
             </div>
           )}
@@ -489,15 +712,80 @@ export default function DashboardPage() {
           {activeTab === "categories" && (
             <section className="rounded-[2rem] bg-white p-6 shadow-soft ring-1 ring-slate-100">
               <h2 className="text-2xl font-black">Categorias</h2>
-              <p className="mt-2 text-sm font-semibold text-slate-500">Por ahora las categorias se crean automaticamente desde los productos publicados.</p>
+              <p className="mt-2 text-sm font-semibold text-slate-500">Crea categorías con icono/foto y arrastra productos hacia ellas.</p>
+              <div className="mt-5 grid gap-3 rounded-2xl bg-slate-50 p-4 md:grid-cols-[1fr_160px_1fr_auto]">
+                <input value={newCategory.name} onChange={(event) => setNewCategory({ ...newCategory, name: event.target.value })} className="rounded-xl border border-slate-200 px-4 py-3 outline-none" placeholder="Nombre de categoría" />
+                <select value={newCategory.icon} onChange={(event) => setNewCategory({ ...newCategory, icon: event.target.value })} className="rounded-xl border border-slate-200 px-4 py-3 outline-none">
+                  <option value="tag">Etiqueta</option>
+                  <option value="box">Caja</option>
+                  <option value="bolt">Energía</option>
+                  <option value="phone">Celular</option>
+                  <option value="home">Hogar</option>
+                </select>
+                <input value={newCategory.imageUrl} onChange={(event) => setNewCategory({ ...newCategory, imageUrl: event.target.value })} className="rounded-xl border border-slate-200 px-4 py-3 outline-none" placeholder="Foto URL opcional" />
+                <button onClick={addCategory} className="rounded-xl bg-slate-950 px-4 py-3 font-black text-white">Crear</button>
+              </div>
               <div className="mt-6 grid gap-3 md:grid-cols-2">
-                {categories.map((item) => (
-                  <div key={item.name} className="flex items-center justify-between rounded-2xl bg-slate-50 p-4">
-                    <div className="font-black">{item.name}</div>
-                    <div className="rounded-full bg-white px-3 py-1 text-xs font-black text-slate-500">{item.count} productos</div>
+                {[...(store?.categories || []), ...categories.filter((item) => !(store?.categories || []).some((category) => category.name === item.name)).map((item) => ({ id: item.name, name: item.name, icon: "tag", imageUrl: "" }))].map((item) => (
+                  <div
+                    key={item.id}
+                    onDragOver={(event) => event.preventDefault()}
+                    onDrop={(event) => {
+                      const productId = event.dataTransfer.getData("productId");
+                      if (productId) moveProductToCategory(productId, item.name);
+                    }}
+                    className="rounded-2xl bg-slate-50 p-4 ring-1 ring-slate-100"
+                  >
+                    <div className="flex items-center justify-between gap-3">
+                      <div className="flex items-center gap-3">
+                        {item.imageUrl ? (
+                          // eslint-disable-next-line @next/next/no-img-element
+                          <img src={item.imageUrl} alt={item.name} className="size-12 rounded-xl object-cover" />
+                        ) : (
+                          <div className="grid size-12 place-items-center rounded-xl bg-white font-black text-brand-600">{item.icon.slice(0, 1).toUpperCase()}</div>
+                        )}
+                        <div>
+                          <div className="font-black">{item.name}</div>
+                          <div className="text-xs font-semibold text-slate-400">Suelta productos aquí</div>
+                        </div>
+                      </div>
+                      <button onClick={() => copyText(`${window.location.origin}/${store?.username}/category/${encodeURIComponent(item.name)}`)} className="grid size-9 place-items-center rounded-xl bg-white text-slate-500"><Copy size={16} /></button>
+                    </div>
                   </div>
                 ))}
-                {!categories.length && <div className="rounded-2xl bg-slate-50 p-6 text-center font-semibold text-slate-400 md:col-span-2">Aun no hay categorias.</div>}
+                {!categories.length && !store?.categories.length && <div className="rounded-2xl bg-slate-50 p-6 text-center font-semibold text-slate-400 md:col-span-2">Aun no hay categorias.</div>}
+              </div>
+            </section>
+          )}
+
+          {activeTab === "marketing" && (
+            <section className="rounded-[2rem] bg-white p-6 shadow-soft ring-1 ring-slate-100">
+              <h2 className="text-2xl font-black">Marketing</h2>
+              <p className="mt-2 text-sm font-semibold text-slate-500">Registra clientes, intereses y datos de contacto para seguimiento.</p>
+              <div className="mt-5 grid gap-3 rounded-2xl bg-slate-50 p-4 md:grid-cols-2">
+                <input value={newCustomer.name} onChange={(event) => setNewCustomer({ ...newCustomer, name: event.target.value })} className="rounded-xl border border-slate-200 px-4 py-3 outline-none" placeholder="Nombre del cliente" />
+                <input value={newCustomer.phone} onChange={(event) => setNewCustomer({ ...newCustomer, phone: event.target.value })} className="rounded-xl border border-slate-200 px-4 py-3 outline-none" placeholder="Teléfono / WhatsApp" />
+                <input value={newCustomer.email} onChange={(event) => setNewCustomer({ ...newCustomer, email: event.target.value })} className="rounded-xl border border-slate-200 px-4 py-3 outline-none" placeholder="Correo" />
+                <input value={newCustomer.interest} onChange={(event) => setNewCustomer({ ...newCustomer, interest: event.target.value })} className="rounded-xl border border-slate-200 px-4 py-3 outline-none" placeholder="Interés del cliente" />
+                <button onClick={addCustomer} disabled={working || !newCustomer.name} className="rounded-xl bg-slate-950 px-4 py-3 font-black text-white disabled:opacity-60 md:col-span-2">Guardar cliente</button>
+              </div>
+              <div className="mt-6 overflow-x-auto">
+                <table className="w-full text-left text-sm">
+                  <thead className="text-slate-500">
+                    <tr><th className="py-3">Cliente</th><th>Teléfono</th><th>Correo</th><th>Interés</th></tr>
+                  </thead>
+                  <tbody>
+                    {customers.map((customer) => (
+                      <tr key={customer.id} className="border-t border-slate-100">
+                        <td className="py-4 font-bold">{customer.name}</td>
+                        <td>{customer.phone}</td>
+                        <td>{customer.email}</td>
+                        <td>{customer.interest}</td>
+                      </tr>
+                    ))}
+                    {!customers.length && <tr><td colSpan={4} className="py-8 text-center font-semibold text-slate-400">Todavía no tienes clientes registrados.</td></tr>}
+                  </tbody>
+                </table>
               </div>
             </section>
           )}
@@ -528,7 +816,7 @@ export default function DashboardPage() {
   );
 }
 
-function ProductTable({ products, publicUsername, compact = false }: { products: Product[]; publicUsername: string; compact?: boolean }) {
+function ProductTable({ products, publicUsername, compact = false, onCopy }: { products: Product[]; publicUsername: string; compact?: boolean; onCopy?: (value: string) => void }) {
   return (
     <div className="mt-5 overflow-x-auto">
       <table className="w-full text-left text-sm">
@@ -550,7 +838,10 @@ function ProductTable({ products, publicUsername, compact = false }: { products:
               <td>{product.clicks}</td>
               {!compact && (
                 <td>
-                  <Link href={`/${publicUsername}/product/${product.slug}`} target="_blank" className="font-black text-brand-600">Ver</Link>
+                  <div className="flex items-center gap-3">
+                    <Link href={`/${publicUsername}/product/${product.slug}`} target="_blank" className="font-black text-brand-600">Ver</Link>
+                    {onCopy && <button onClick={() => onCopy(`${window.location.origin}/${publicUsername}/product/${product.slug}`)} className="font-black text-slate-500">Copiar</button>}
+                  </div>
                 </td>
               )}
             </tr>

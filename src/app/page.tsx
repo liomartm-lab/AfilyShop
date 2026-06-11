@@ -1,5 +1,6 @@
 import Link from "next/link";
 import { ArrowRight, BrainCircuit, ContactRound, Layers3, Megaphone, Sparkles } from "lucide-react";
+import { HomeAuthRedirect } from "@/components/HomeAuthRedirect";
 
 const scenes = [
   {
@@ -28,11 +29,13 @@ const scenes = [
 export default function HomePage() {
   return (
     <main className="bg-[#f7f8fb] text-slate-950">
+      <HomeAuthRedirect />
       <header className="fixed inset-x-0 top-0 z-50 border-b border-white/60 bg-white/85 backdrop-blur-xl">
         <div className="mx-auto flex max-w-7xl items-center justify-between px-5 py-4">
           <Link href="/" className="flex items-center gap-2 text-lg font-black text-slate-950">
-            <span className="grid size-9 place-items-center rounded-2xl bg-brand-600 text-white">A</span>
-            AfiliShop
+            {/* eslint-disable-next-line @next/next/no-img-element */}
+            <img src="/afilyshop-icon.png" alt="AfilyShop" className="size-10 rounded-2xl object-cover" />
+            AfilyShop
           </Link>
           <nav className="flex items-center gap-2 text-sm font-black">
             <Link href="/login" className="hidden rounded-2xl px-4 py-2 text-slate-700 hover:bg-slate-100 sm:inline-flex">Iniciar sesión</Link>

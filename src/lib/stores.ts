@@ -15,6 +15,16 @@ import { slugify } from "@/lib/products";
 export type StoreTheme = {
   primaryColor: string;
   accentColor: string;
+  font: string;
+  layout: string;
+  texture: string;
+};
+
+export type StoreCategory = {
+  id: string;
+  name: string;
+  icon: string;
+  imageUrl: string;
 };
 
 export type StoreProfile = {
@@ -28,6 +38,7 @@ export type StoreProfile = {
   contactEmail: string;
   phone: string;
   theme: StoreTheme;
+  categories: StoreCategory[];
   plan: "free" | "pro" | "business";
   status: "active" | "paused";
   setupComplete: boolean;
@@ -42,6 +53,7 @@ export type StoreInput = {
   contactEmail: string;
   phone: string;
   theme: StoreTheme;
+  categories?: StoreCategory[];
   setupComplete?: boolean;
 };
 
@@ -71,8 +83,20 @@ function storeFromDoc(id: string, data: Record<string, unknown>): StoreProfile {
     phone: String(data.phone || ""),
     theme: {
       primaryColor: String(theme.primaryColor || "#2563eb"),
-      accentColor: String(theme.accentColor || "#10b981")
+      accentColor: String(theme.accentColor || "#10b981"),
+      font: String(theme.font || "Inter"),
+      layout: String(theme.layout || "grid"),
+      texture: String(theme.texture || "clean")
     },
+    categories: Array.isArray(data.categories) ? data.categories.map((item) => {
+      const category = item && typeof item === "object" ? item as Record<string, unknown> : {};
+      return {
+        id: String(category.id || crypto.randomUUID()),
+        name: String(category.name || "Categoria"),
+        icon: String(category.icon || "tag"),
+        imageUrl: String(category.imageUrl || "")
+      };
+    }) : [],
     plan: data.plan === "pro" || data.plan === "business" ? data.plan : "free",
     status: data.status === "paused" ? "paused" : "active",
     setupComplete: Boolean(data.setupComplete)
@@ -135,8 +159,12 @@ export async function createDefaultStore(ownerId: string, email: string, request
     phone: "",
     theme: {
       primaryColor: "#2563eb",
-      accentColor: "#10b981"
+      accentColor: "#10b981",
+      font: "Inter",
+      layout: "grid",
+      texture: "clean"
     },
+    categories: [],
     plan: "free",
     status: "active",
     setupComplete: false,
@@ -172,6 +200,7 @@ export async function updateStore(ownerId: string, input: StoreInput) {
     contactEmail: input.contactEmail,
     phone: input.phone,
     theme: input.theme,
+    categories: input.categories || [],
     setupComplete: input.setupComplete || false,
     updatedAt: serverTimestamp()
   });

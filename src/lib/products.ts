@@ -16,6 +16,7 @@ import { products as demoProducts, type Product } from "@/data/products";
 export type ProductInput = {
   ownerId?: string;
   storeId?: string;
+  productType?: "affiliate" | "physical";
   title: string;
   description: string;
   image: string;
@@ -34,6 +35,7 @@ function productFromDoc(id: string, data: Record<string, unknown>): Product {
     id,
     ownerId: typeof data.ownerId === "string" ? data.ownerId : undefined,
     storeId: typeof data.storeId === "string" ? data.storeId : undefined,
+    productType: data.productType === "physical" ? "physical" : "affiliate",
     title: String(data.title || "Producto sin título"),
     slug: String(data.slug || id),
     description: String(data.description || ""),
@@ -136,6 +138,7 @@ export async function createProduct(input: ProductInput) {
   const docRef = await addDoc(collection(db, "products"), {
     ownerId: input.ownerId || null,
     storeId: input.storeId || null,
+    productType: input.productType || "affiliate",
     title: input.title,
     slug,
     description: input.description,
@@ -159,6 +162,15 @@ export async function createProduct(input: ProductInput) {
   if (!product) throw new Error("El producto se guardó, pero no se pudo leer");
 
   return product;
+}
+
+export async function updateProductCategory(productId: string, category: string) {
+  if (!db) throw new Error("Firebase no está configurado");
+
+  await updateDoc(doc(db, "products", productId), {
+    category,
+    updatedAt: serverTimestamp()
+  });
 }
 
 export async function registerProductClick(productId: string, request: Request) {
