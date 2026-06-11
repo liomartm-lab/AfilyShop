@@ -20,13 +20,17 @@ export type StoreTheme = {
 export type StoreProfile = {
   id: string;
   ownerId: string;
+  ownerName: string;
   username: string;
   name: string;
   logoUrl: string;
   description: string;
+  contactEmail: string;
+  phone: string;
   theme: StoreTheme;
   plan: "free" | "pro" | "business";
   status: "active" | "paused";
+  setupComplete: boolean;
 };
 
 export type StoreInput = {
@@ -34,7 +38,10 @@ export type StoreInput = {
   username: string;
   logoUrl: string;
   description: string;
+  contactEmail: string;
+  phone: string;
   theme: StoreTheme;
+  setupComplete?: boolean;
 };
 
 const reservedUsernames = new Set([
@@ -54,16 +61,20 @@ function storeFromDoc(id: string, data: Record<string, unknown>): StoreProfile {
   return {
     id,
     ownerId: String(data.ownerId || id),
+    ownerName: String(data.ownerName || ""),
     username: String(data.username || id),
     name: String(data.name || "Mi tienda"),
     logoUrl: String(data.logoUrl || ""),
     description: String(data.description || "Catálogo de productos recomendados."),
+    contactEmail: String(data.contactEmail || ""),
+    phone: String(data.phone || ""),
     theme: {
       primaryColor: String(theme.primaryColor || "#2563eb"),
       accentColor: String(theme.accentColor || "#10b981")
     },
     plan: data.plan === "pro" || data.plan === "business" ? data.plan : "free",
-    status: data.status === "paused" ? "paused" : "active"
+    status: data.status === "paused" ? "paused" : "active",
+    setupComplete: Boolean(data.setupComplete)
   };
 }
 
@@ -102,10 +113,11 @@ export async function usernameIsAvailable(username: string, ownerId?: string) {
   return snapshot.empty || snapshot.docs.every((item) => item.id === ownerId);
 }
 
-export async function createDefaultStore(ownerId: string, email: string, requestedUsername?: string) {
+export async function createDefaultStore(ownerId: string, email: string, requestedUsername?: string, ownerName?: string) {
   if (!db) throw new Error("Firebase no está configurado");
 
   const emailName = email.split("@")[0] || "tienda";
+  const displayName = ownerName?.trim() || emailName;
   const baseUsername = normalizeUsername(requestedUsername || emailName);
   const username = await usernameIsAvailable(baseUsername)
     ? baseUsername
@@ -113,16 +125,20 @@ export async function createDefaultStore(ownerId: string, email: string, request
 
   const store = {
     ownerId,
+    ownerName: displayName,
     username,
-    name: `Tienda de ${emailName}`,
+    name: `Tienda de ${displayName}`,
     logoUrl: "",
     description: "Catálogo de productos recomendados.",
+    contactEmail: email,
+    phone: "",
     theme: {
       primaryColor: "#2563eb",
       accentColor: "#10b981"
     },
     plan: "free",
     status: "active",
+    setupComplete: false,
     createdAt: serverTimestamp(),
     updatedAt: serverTimestamp()
   };
@@ -130,6 +146,7 @@ export async function createDefaultStore(ownerId: string, email: string, request
   await setDoc(doc(db, "stores", ownerId), store);
   await setDoc(doc(db, "users", ownerId), {
     email,
+    name: displayName,
     storeId: ownerId,
     createdAt: serverTimestamp(),
     updatedAt: serverTimestamp()
@@ -150,7 +167,10 @@ export async function updateStore(ownerId: string, input: StoreInput) {
     username,
     logoUrl: input.logoUrl,
     description: input.description,
+    contactEmail: input.contactEmail,
+    phone: input.phone,
     theme: input.theme,
+    setupComplete: input.setupComplete || false,
     updatedAt: serverTimestamp()
   });
 

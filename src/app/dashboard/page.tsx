@@ -4,12 +4,13 @@ import { useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { onAuthStateChanged, signOut, type User } from "firebase/auth";
+import { getDownloadURL, ref, uploadBytes } from "firebase/storage";
 import { Header } from "@/components/Header";
 import type { Product } from "@/data/products";
-import { auth } from "@/lib/firebase";
+import { auth, storage } from "@/lib/firebase";
 import { createProduct, getProductsByOwner } from "@/lib/products";
 import { createDefaultStore, getStoreByOwnerId, updateStore, type StoreProfile } from "@/lib/stores";
-import { ExternalLink, Loader2, LogOut, PackagePlus, Save, WandSparkles } from "lucide-react";
+import { ExternalLink, Loader2, LogOut, PackagePlus, Save, Upload, WandSparkles } from "lucide-react";
 
 type AnalyzeResult = {
   title: string;
@@ -88,13 +89,36 @@ export default function DashboardPage() {
         username: store.username,
         logoUrl: store.logoUrl,
         description: store.description,
-        theme: store.theme
+        contactEmail: store.contactEmail,
+        phone: store.phone,
+        theme: store.theme,
+        setupComplete: store.setupComplete
       });
 
       setStore(updated);
       setMessage("Tienda actualizada.");
     } catch (err) {
       setError(err instanceof Error ? err.message : "No se pudo guardar la tienda");
+    } finally {
+      setWorking(false);
+    }
+  }
+
+  async function uploadLogo(file: File) {
+    if (!user || !store || !storage) return setError("Firebase Storage no está configurado");
+
+    setWorking(true);
+    setError("");
+    setMessage("");
+
+    try {
+      const logoRef = ref(storage, `stores/${user.uid}/logo-${Date.now()}-${file.name}`);
+      await uploadBytes(logoRef, file);
+      const logoUrl = await getDownloadURL(logoRef);
+      setStore({ ...store, logoUrl });
+      setMessage("Logo subido. Recuerda guardar la tienda.");
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "No se pudo subir el logo");
     } finally {
       setWorking(false);
     }
@@ -203,10 +227,32 @@ export default function DashboardPage() {
                 <span className="text-sm font-black text-slate-700">Logo por URL</span>
                 <input value={store?.logoUrl || ""} onChange={(event) => store && setStore({ ...store, logoUrl: event.target.value })} className="mt-2 w-full rounded-2xl border border-slate-200 px-4 py-4 outline-none ring-brand-100 focus:ring-4" placeholder="https://..." />
               </label>
+              <div className="flex flex-col gap-3 rounded-2xl border border-slate-200 p-4 sm:flex-row sm:items-center">
+                {store?.logoUrl ? (
+                  // eslint-disable-next-line @next/next/no-img-element
+                  <img src={store.logoUrl} alt="Logo" className="size-14 rounded-2xl object-cover" />
+                ) : (
+                  <div className="grid size-14 place-items-center rounded-2xl bg-brand-50 font-black text-brand-600">A</div>
+                )}
+                <label className="inline-flex cursor-pointer items-center justify-center gap-2 rounded-2xl bg-slate-950 px-4 py-3 text-sm font-black text-white">
+                  <Upload size={16} /> Subir logo
+                  <input type="file" accept="image/*" className="hidden" onChange={(event) => event.target.files?.[0] && uploadLogo(event.target.files[0])} />
+                </label>
+              </div>
               <label>
                 <span className="text-sm font-black text-slate-700">Descripción</span>
                 <textarea value={store?.description || ""} onChange={(event) => store && setStore({ ...store, description: event.target.value })} className="mt-2 min-h-28 w-full rounded-2xl border border-slate-200 px-4 py-4 outline-none ring-brand-100 focus:ring-4" />
               </label>
+              <div className="grid gap-4 md:grid-cols-2">
+                <label>
+                  <span className="text-sm font-black text-slate-700">Teléfono / WhatsApp</span>
+                  <input value={store?.phone || ""} onChange={(event) => store && setStore({ ...store, phone: event.target.value })} className="mt-2 w-full rounded-2xl border border-slate-200 px-4 py-4 outline-none ring-brand-100 focus:ring-4" placeholder="+1 555 000 0000" />
+                </label>
+                <label>
+                  <span className="text-sm font-black text-slate-700">Correo de contacto</span>
+                  <input type="email" value={store?.contactEmail || ""} onChange={(event) => store && setStore({ ...store, contactEmail: event.target.value })} className="mt-2 w-full rounded-2xl border border-slate-200 px-4 py-4 outline-none ring-brand-100 focus:ring-4" />
+                </label>
+              </div>
               <div className="grid gap-4 md:grid-cols-2">
                 <label>
                   <span className="text-sm font-black text-slate-700">Color principal</span>

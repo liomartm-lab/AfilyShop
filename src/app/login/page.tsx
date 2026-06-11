@@ -1,22 +1,33 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { createUserWithEmailAndPassword, signInWithEmailAndPassword } from "firebase/auth";
-import { Header } from "@/components/Header";
+import {
+  createUserWithEmailAndPassword,
+  GoogleAuthProvider,
+  signInWithEmailAndPassword,
+  signInWithPopup,
+  updateProfile
+} from "firebase/auth";
 import { auth } from "@/lib/firebase";
-import { createDefaultStore } from "@/lib/stores";
+import { createDefaultStore, getStoreByOwnerId } from "@/lib/stores";
 import { Loader2, LogIn, UserPlus } from "lucide-react";
 
 export default function LoginPage() {
   const router = useRouter();
   const [mode, setMode] = useState<"login" | "register">("login");
+  const [name, setName] = useState("");
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [username, setUsername] = useState("");
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
+
+  useEffect(() => {
+    const params = new URLSearchParams(window.location.search);
+    if (params.get("mode") === "register") setMode("register");
+  }, []);
 
   async function submitForm(event: React.FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -28,7 +39,10 @@ export default function LoginPage() {
     try {
       if (mode === "register") {
         const credential = await createUserWithEmailAndPassword(auth, email, password);
-        await createDefaultStore(credential.user.uid, credential.user.email || email, username);
+        await updateProfile(credential.user, { displayName: name });
+        await createDefaultStore(credential.user.uid, credential.user.email || email, username, name);
+        router.push("/setup");
+        return;
       } else {
         await signInWithEmailAndPassword(auth, email, password);
       }
@@ -41,9 +55,46 @@ export default function LoginPage() {
     }
   }
 
+  async function continueWithGoogle() {
+    if (!auth) return setError("Firebase no está configurado");
+
+    setLoading(true);
+    setError("");
+
+    try {
+      const credential = await signInWithPopup(auth, new GoogleAuthProvider());
+      const existingStore = await getStoreByOwnerId(credential.user.uid);
+
+      if (!existingStore) {
+        await createDefaultStore(
+          credential.user.uid,
+          credential.user.email || "usuario@email.com",
+          credential.user.email?.split("@")[0],
+          credential.user.displayName || "Vendedor"
+        );
+        router.push("/setup");
+        return;
+      }
+
+      router.push(existingStore.setupComplete ? "/dashboard" : "/setup");
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "No se pudo continuar con Google");
+    } finally {
+      setLoading(false);
+    }
+  }
+
   return (
-    <main>
-      <Header />
+    <main className="min-h-screen bg-[#f7f8fb]">
+      <header className="border-b border-slate-200 bg-white">
+        <div className="mx-auto flex max-w-7xl items-center justify-between px-5 py-4">
+          <Link href="/" className="flex items-center gap-2 text-lg font-black text-slate-950">
+            <span className="grid size-9 place-items-center rounded-2xl bg-brand-600 text-white">A</span>
+            AfiliShop
+          </Link>
+          <Link href="/" className="text-sm font-black text-slate-500">Volver</Link>
+        </div>
+      </header>
       <section className="mx-auto grid min-h-[calc(100vh-73px)] max-w-7xl gap-10 px-5 py-10 lg:grid-cols-[.9fr_1.1fr] lg:items-center">
         <div>
           <p className="font-bold uppercase tracking-wide text-brand-600">Affiliate Shop</p>
@@ -51,7 +102,7 @@ export default function LoginPage() {
             Crea tu catálogo público y gestiona tus enlaces desde un solo lugar.
           </h1>
           <p className="mt-5 max-w-2xl text-lg leading-8 text-slate-600">
-            Cada vendedor tendrá su propio link, productos afiliados, productos físicos, tema visual y analítica.
+            Crea tu acceso y después configuraremos tu tienda pública, contacto, logo y enlace personalizado.
           </p>
         </div>
 
@@ -66,11 +117,17 @@ export default function LoginPage() {
           </div>
 
           {mode === "register" && (
-            <label className="mb-4 block">
-              <span className="text-sm font-black text-slate-700">Usuario público</span>
-              <input value={username} onChange={(event) => setUsername(event.target.value)} className="mt-2 w-full rounded-2xl border border-slate-200 px-4 py-4 outline-none ring-brand-100 focus:ring-4" placeholder="miusuario" />
-              <span className="mt-2 block text-xs font-semibold text-slate-400">Tu tienda será /{username || "miusuario"}</span>
-            </label>
+            <>
+              <label className="mb-4 block">
+                <span className="text-sm font-black text-slate-700">Nombre</span>
+                <input value={name} onChange={(event) => setName(event.target.value)} className="mt-2 w-full rounded-2xl border border-slate-200 px-4 py-4 outline-none ring-brand-100 focus:ring-4" placeholder="Tu nombre" required />
+              </label>
+              <label className="mb-4 block">
+                <span className="text-sm font-black text-slate-700">Usuario público</span>
+                <input value={username} onChange={(event) => setUsername(event.target.value)} className="mt-2 w-full rounded-2xl border border-slate-200 px-4 py-4 outline-none ring-brand-100 focus:ring-4" placeholder="miusuario" />
+                <span className="mt-2 block text-xs font-semibold text-slate-400">Tu tienda será /{username || "miusuario"}</span>
+              </label>
+            </>
           )}
 
           <label className="mb-4 block">
@@ -88,6 +145,15 @@ export default function LoginPage() {
           <button disabled={loading} className="mt-6 inline-flex w-full items-center justify-center gap-2 rounded-2xl bg-brand-600 px-5 py-4 font-black text-white hover:bg-brand-700 disabled:opacity-60">
             {loading ? <Loader2 className="animate-spin" /> : mode === "login" ? <LogIn /> : <UserPlus />}
             {mode === "login" ? "Entrar al dashboard" : "Crear mi tienda"}
+          </button>
+
+          <div className="my-5 flex items-center gap-3 text-xs font-black uppercase tracking-wide text-slate-400">
+            <span className="h-px flex-1 bg-slate-200" /> o <span className="h-px flex-1 bg-slate-200" />
+          </div>
+
+          <button type="button" onClick={continueWithGoogle} disabled={loading} className="inline-flex w-full items-center justify-center gap-3 rounded-2xl bg-white px-5 py-4 font-black text-slate-900 ring-1 ring-slate-200 hover:bg-slate-50 disabled:opacity-60">
+            <span className="grid size-6 place-items-center rounded-full bg-slate-950 text-xs text-white">G</span>
+            Continuar con Google
           </button>
 
           <Link href="/" className="mt-4 block text-center text-sm font-bold text-slate-500">Volver al inicio</Link>

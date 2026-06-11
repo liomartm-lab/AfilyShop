@@ -2,7 +2,7 @@ import Link from "next/link";
 import { notFound } from "next/navigation";
 import { getProductByOwnerAndSlug } from "@/lib/products";
 import { getStoreByUsername } from "@/lib/stores";
-import { ExternalLink, ShieldCheck } from "lucide-react";
+import { ExternalLink, MessageCircle, ShieldCheck } from "lucide-react";
 
 export const dynamic = "force-dynamic";
 
@@ -13,6 +13,8 @@ export default async function PublicStoreProductPage({ params }: { params: Promi
 
   const product = await getProductByOwnerAndSlug(store.ownerId, slug);
   if (!product) notFound();
+  const whatsappPhone = store.phone.replace(/\D/g, "");
+  const whatsappText = encodeURIComponent(`Hola, estoy interesado en: ${product.title}`);
 
   return (
     <main>
@@ -37,6 +39,11 @@ export default async function PublicStoreProductPage({ params }: { params: Promi
           <Link href={`/go/${product.id}`} className="mt-8 inline-flex w-full items-center justify-center gap-2 rounded-2xl px-6 py-4 text-lg font-black text-white md:w-auto" style={{ background: store.theme.primaryColor }}>
             Comprar ahora <ExternalLink />
           </Link>
+          {whatsappPhone && (
+            <a href={`https://wa.me/${whatsappPhone}?text=${whatsappText}`} target="_blank" className="mt-3 inline-flex w-full items-center justify-center gap-2 rounded-2xl bg-emerald-500 px-6 py-4 text-lg font-black text-white md:ml-3 md:w-auto">
+              Consultar por WhatsApp <MessageCircle />
+            </a>
+          )}
           <div className="mt-8 rounded-2xl bg-amber-50 p-5 text-sm leading-6 text-amber-900 ring-1 ring-amber-100">
             <div className="mb-2 flex items-center gap-2 font-black"><ShieldCheck size={18} /> Aviso de afiliado</div>
             Este producto se vende en una tienda externa. El vendedor puede recibir una comisión si compras usando este enlace.

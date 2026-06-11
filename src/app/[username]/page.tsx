@@ -3,7 +3,7 @@ import { notFound } from "next/navigation";
 import { ProductCard } from "@/components/ProductCard";
 import { getPublishedProductsByOwner } from "@/lib/products";
 import { getStoreByUsername } from "@/lib/stores";
-import { ShoppingBag } from "lucide-react";
+import { Mail, MessageCircle, ShoppingBag } from "lucide-react";
 
 export const dynamic = "force-dynamic";
 
@@ -13,6 +13,7 @@ export default async function PublicStorePage({ params }: { params: Promise<{ us
   if (!store || store.status !== "active") notFound();
 
   const products = await getPublishedProductsByOwner(store.ownerId);
+  const whatsappPhone = store.phone.replace(/\D/g, "");
 
   return (
     <main style={{ "--store-primary": store.theme.primaryColor, "--store-accent": store.theme.accentColor } as React.CSSProperties}>
@@ -42,6 +43,18 @@ export default async function PublicStorePage({ params }: { params: Promise<{ us
             <p className="font-bold uppercase tracking-wide" style={{ color: store.theme.primaryColor }}>Catálogo del vendedor</p>
             <h1 className="mt-3 text-4xl font-black text-slate-950 md:text-5xl">{store.name}</h1>
             <p className="mt-4 max-w-2xl text-lg leading-8 text-slate-600">{store.description}</p>
+            <div className="mt-6 flex flex-wrap gap-3">
+              {whatsappPhone && (
+                <a href={`https://wa.me/${whatsappPhone}`} target="_blank" className="inline-flex items-center gap-2 rounded-2xl px-5 py-3 font-black text-white" style={{ background: store.theme.accentColor }}>
+                  <MessageCircle size={18} /> WhatsApp
+                </a>
+              )}
+              {store.contactEmail && (
+                <a href={`mailto:${store.contactEmail}`} className="inline-flex items-center gap-2 rounded-2xl bg-slate-100 px-5 py-3 font-black text-slate-700">
+                  <Mail size={18} /> Correo
+                </a>
+              )}
+            </div>
           </div>
           <div className="inline-flex items-center gap-3 rounded-2xl bg-slate-50 px-5 py-4 font-black text-slate-700">
             <ShoppingBag style={{ color: store.theme.accentColor }} /> {products.length} productos
