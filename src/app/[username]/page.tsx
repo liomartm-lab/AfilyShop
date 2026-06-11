@@ -3,7 +3,7 @@ import { notFound } from "next/navigation";
 import { ProductCard } from "@/components/ProductCard";
 import { getPublishedProductsByOwner } from "@/lib/products";
 import { getStoreByUsername } from "@/lib/stores";
-import { Mail, MessageCircle, ShoppingBag } from "lucide-react";
+import { Mail, MessageCircle, Search, ShoppingBag, Sparkles } from "lucide-react";
 
 export const dynamic = "force-dynamic";
 
@@ -14,10 +14,11 @@ export default async function PublicStorePage({ params }: { params: Promise<{ us
 
   const products = await getPublishedProductsByOwner(store.ownerId);
   const whatsappPhone = store.phone.replace(/\D/g, "");
+  const categoryNames = Array.from(new Set(products.map((product) => product.category))).slice(0, 8);
 
   return (
-    <main style={{ "--store-primary": store.theme.primaryColor, "--store-accent": store.theme.accentColor } as React.CSSProperties}>
-      <header className="border-b border-slate-200 bg-white">
+    <main className="min-h-screen bg-[#f7f8fb]" style={{ "--store-primary": store.theme.primaryColor, "--store-accent": store.theme.accentColor } as React.CSSProperties}>
+      <header className="sticky top-0 z-30 border-b border-white/70 bg-white/85 backdrop-blur-xl">
         <div className="mx-auto flex max-w-7xl items-center justify-between px-5 py-4">
           <Link href={`/${store.username}`} className="flex items-center gap-3">
             {store.logoUrl ? (
@@ -33,16 +34,18 @@ export default async function PublicStorePage({ params }: { params: Promise<{ us
               <div className="text-xs font-bold text-slate-400">@{store.username}</div>
             </div>
           </Link>
-          <Link href="/login" className="rounded-2xl bg-slate-900 px-4 py-2 text-sm font-bold text-white">Crear mi tienda</Link>
+          <Link href="/login" className="rounded-2xl bg-slate-950 px-4 py-2 text-sm font-bold text-white">Crear mi tienda</Link>
         </div>
       </header>
 
-      <section className="mx-auto max-w-7xl px-5 py-10">
-        <div className="grid gap-8 rounded-[2rem] bg-white p-6 shadow-soft ring-1 ring-slate-100 md:grid-cols-[1fr_auto] md:items-end md:p-8">
+      <section className="mx-auto max-w-7xl px-5 py-8">
+        <div className="grid gap-8 overflow-hidden rounded-[2rem] bg-slate-950 p-6 text-white shadow-soft md:grid-cols-[1fr_360px] md:p-8">
           <div>
-            <p className="font-bold uppercase tracking-wide" style={{ color: store.theme.primaryColor }}>Catálogo del vendedor</p>
-            <h1 className="mt-3 text-4xl font-black text-slate-950 md:text-5xl">{store.name}</h1>
-            <p className="mt-4 max-w-2xl text-lg leading-8 text-slate-600">{store.description}</p>
+            <div className="inline-flex items-center gap-2 rounded-full bg-white/10 px-4 py-2 text-sm font-black ring-1 ring-white/10">
+              <Sparkles size={16} /> Catálogo exclusivo
+            </div>
+            <h1 className="mt-5 max-w-3xl text-4xl font-black leading-tight md:text-6xl">{store.name}</h1>
+            <p className="mt-4 max-w-2xl text-lg leading-8 text-slate-300">{store.description}</p>
             <div className="mt-6 flex flex-wrap gap-3">
               {whatsappPhone && (
                 <a href={`https://wa.me/${whatsappPhone}`} target="_blank" className="inline-flex items-center gap-2 rounded-2xl px-5 py-3 font-black text-white" style={{ background: store.theme.accentColor }}>
@@ -55,14 +58,33 @@ export default async function PublicStorePage({ params }: { params: Promise<{ us
                 </a>
               )}
             </div>
+            {!!categoryNames.length && (
+              <div className="mt-7 flex flex-wrap gap-2">
+                {categoryNames.map((category) => (
+                  <Link key={category} href={`/${store.username}/category/${encodeURIComponent(category)}`} className="rounded-full bg-white/10 px-4 py-2 text-sm font-bold ring-1 ring-white/10">
+                    {category}
+                  </Link>
+                ))}
+              </div>
+            )}
           </div>
-          <div className="inline-flex items-center gap-3 rounded-2xl bg-slate-50 px-5 py-4 font-black text-slate-700">
-            <ShoppingBag style={{ color: store.theme.accentColor }} /> {products.length} productos
+          <div className="rounded-[1.5rem] bg-white p-5 text-slate-950">
+            <div className="flex items-center gap-3">
+              <ShoppingBag style={{ color: store.theme.accentColor }} />
+              <div>
+                <div className="text-3xl font-black">{products.length}</div>
+                <div className="text-sm font-bold text-slate-400">productos publicados</div>
+              </div>
+            </div>
+            <div className="mt-5 flex items-center gap-3 rounded-2xl bg-slate-50 px-4 py-3 text-slate-500">
+              <Search size={18} />
+              <span className="text-sm font-semibold">Explora el catálogo</span>
+            </div>
           </div>
         </div>
       </section>
 
-      <section className="mx-auto max-w-7xl px-5 pb-12">
+      <section className="mx-auto max-w-7xl px-5 pb-14">
         <div className="grid gap-6 md:grid-cols-2 lg:grid-cols-3">
           {products.map((product) => (
             <ProductCard key={product.id} product={product} productPath={`/${store.username}/product/${product.slug}`} />
