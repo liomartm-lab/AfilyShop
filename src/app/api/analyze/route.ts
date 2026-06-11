@@ -182,6 +182,11 @@ async function fetchProductHtml(productUrl: string) {
 
   const browserResponse = await fetchWithBrowserApi(productUrl);
   if (browserResponse?.ok) return browserResponse.text();
+  if (browserResponse) {
+    const provider = process.env.ZENROWS_API_KEY ? "ZenRows" : "ScraperAPI";
+    const detail = cleanText(await browserResponse.text());
+    throw new Error(`${provider} respondió con error ${browserResponse.status}${detail ? `: ${detail}` : ""}`);
+  }
 
   throw new Error(`La tienda respondió con error ${response.status}. Puedes publicar el producto completando los datos manualmente.`);
 }
