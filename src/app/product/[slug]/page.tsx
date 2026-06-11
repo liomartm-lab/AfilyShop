@@ -25,7 +25,7 @@ export default async function ProductPage({ params }: { params: Promise<{ slug: 
           <p className="mt-4 text-lg leading-8 text-slate-600">{product.description}</p>
           <div className="mt-6 text-4xl font-black">${product.price.toFixed(2)}</div>
           <p className="mt-2 text-sm font-semibold text-slate-400">Precio aproximado detectado desde tienda externa.</p>
-          <Link href={`/go/${product.id}`} className="mt-8 inline-flex w-full items-center justify-center gap-2 rounded-2xl bg-brand-600 px-6 py-4 text-lg font-black text-white hover:bg-brand-700 md:w-auto">
+          <Link href={`/go/${product.id}`} target="_blank" rel="noopener noreferrer" className="mt-8 inline-flex w-full items-center justify-center gap-2 rounded-2xl bg-brand-600 px-6 py-4 text-lg font-black text-white hover:bg-brand-700 md:w-auto">
             Comprar ahora <ExternalLink />
           </Link>
           <div className="mt-8 rounded-2xl bg-amber-50 p-5 text-sm leading-6 text-amber-900 ring-1 ring-amber-100">

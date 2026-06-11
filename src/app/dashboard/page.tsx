@@ -840,7 +840,7 @@ function ProductTable({ products, publicUsername, compact = false, onCopy }: { p
               {!compact && (
                 <td>
                   <div className="flex items-center gap-3">
-                    <Link href={`/${publicUsername}/product/${product.slug}`} target="_blank" className="font-black text-brand-600">Ver</Link>
+                    <Link href={`/${publicUsername}/product/${product.slug}`} target="_blank" rel="noopener noreferrer" className="font-black text-brand-600">Ver</Link>
                     {onCopy && <button onClick={() => onCopy(`${window.location.origin}/${publicUsername}/product/${product.slug}`)} className="font-black text-slate-500">Copiar</button>}
                   </div>
                 </td>

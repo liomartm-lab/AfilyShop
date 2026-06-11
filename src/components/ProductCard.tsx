@@ -35,7 +35,7 @@ export function ProductCard({ product, productPath }: { product: Product; produc
               Consultar
             </Link>
           ) : (
-            <Link href={`/go/${product.id}`} className="inline-flex items-center gap-2 rounded-xl bg-brand-600 px-4 py-3 text-sm font-black text-white hover:bg-brand-700">
+            <Link href={`/go/${product.id}`} target="_blank" rel="noopener noreferrer" className="inline-flex items-center gap-2 rounded-xl bg-brand-600 px-4 py-3 text-sm font-black text-white hover:bg-brand-700">
               Comprar <ExternalLink size={16} />
             </Link>
           )}
