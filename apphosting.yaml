@@ -1,0 +1,58 @@
+runConfig:
+  minInstances: 0
+  maxInstances: 10
+  concurrency: 80
+  cpu: 1
+  memoryMiB: 512
+
+env:
+  - variable: NEXT_PUBLIC_FIREBASE_API_KEY
+    value: "AIzaSyCZJSqvIWQF7TYAX1beH496rg7CxH7o1po"
+    availability:
+      - BUILD
+      - RUNTIME
+  - variable: NEXT_PUBLIC_FIREBASE_AUTH_DOMAIN
+    value: "afilishop-3d7e2.firebaseapp.com"
+    availability:
+      - BUILD
+      - RUNTIME
+  - variable: NEXT_PUBLIC_FIREBASE_PROJECT_ID
+    value: "afilishop-3d7e2"
+    availability:
+      - BUILD
+      - RUNTIME
+  - variable: NEXT_PUBLIC_FIREBASE_STORAGE_BUCKET
+    value: "afilishop-3d7e2.firebasestorage.app"
+    availability:
+      - BUILD
+      - RUNTIME
+  - variable: NEXT_PUBLIC_FIREBASE_MESSAGING_SENDER_ID
+    value: "1015701693792"
+    availability:
+      - BUILD
+      - RUNTIME
+  - variable: NEXT_PUBLIC_FIREBASE_APP_ID
+    value: "1:1015701693792:web:f41dcc835b31438ed02a05"
+    availability:
+      - BUILD
+      - RUNTIME
+  - variable: NEXT_PUBLIC_FIREBASE_MEASUREMENT_ID
+    value: "G-CDD8TRLRBW"
+    availability:
+      - BUILD
+      - RUNTIME
+  - variable: DEFAULT_AFFILIATE_CODE
+    value: "tu-codigo-afiliado"
+    availability:
+      - BUILD
+      - RUNTIME
+  - variable: AMAZON_AFFILIATE_TAG
+    value: "tu-tag-amazon"
+    availability:
+      - BUILD
+      - RUNTIME
+  - variable: WALMART_AFFILIATE_ID
+    value: "tu-id-walmart"
+    availability:
+      - BUILD
+      - RUNTIME
