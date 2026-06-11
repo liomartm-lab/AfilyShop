@@ -66,6 +66,57 @@ function cleanPrice(value: string) {
   return match ? match[0].replace(/,(?=\d{1,2}$)/, ".").replace(/,/g, "") : null;
 }
 
+function readPrice($: cheerio.CheerioAPI) {
+  const mainSalePrice = cleanPrice($(".summary.entry-summary p.price ins .woocommerce-Price-amount").first().text());
+  if (mainSalePrice) return Number(mainSalePrice).toFixed(2);
+
+  const mainPrice = cleanPrice($(".summary.entry-summary p.price .woocommerce-Price-amount").last().text());
+  if (mainPrice) return Number(mainPrice).toFixed(2);
+
+  const simpleMainPrice = cleanPrice($(".summary.entry-summary p.price").first().text());
+  if (simpleMainPrice) return Number(simpleMainPrice).toFixed(2);
+
+  const candidates: string[] = [];
+  const selectors = [
+    ".summary .price .woocommerce-Price-amount",
+    ".summary .price",
+    ".woocommerce-Price-amount",
+    '[itemprop="price"]',
+    'meta[property="product:price:amount"]',
+    'meta[property="og:price:amount"]',
+    ".price"
+  ];
+
+  for (const selector of selectors) {
+    $(selector).each((_index, element) => {
+      const raw = $(element).attr("content") || $(element).text();
+      const text = cheerio.load(raw).text() || raw;
+      const matches = text.match(/\d[\d.,]*/g) || [];
+      candidates.push(...matches);
+    });
+  }
+
+  const prices = candidates
+    .map((candidate) => Number(cleanPrice(candidate)))
+    .filter((price) => Number.isFinite(price) && price > 0);
+
+  if (!prices.length) return null;
+
+  return prices[prices.length - 1].toFixed(2);
+}
+
+function readDeliveryTime($: cheerio.CheerioAPI) {
+  const bodyText = cleanText($("body").text());
+  const deliveryMatch = bodyText.match(/Entrega:\s*([^\.]+\.?)/i);
+  if (deliveryMatch?.[1]) return `Entrega: ${cleanText(deliveryMatch[1])}`;
+
+  return cleanText(readMeta($, [
+    '[class*="delivery-time"]',
+    '[class*="estimated-delivery"]',
+    '[class*="tiempo-entrega"]'
+  ]));
+}
+
 function readImages($: cheerio.CheerioAPI, originalUrl: string) {
   const images = new Set<string>();
   const selectors = [
@@ -100,6 +151,18 @@ function decodeHtml(value: string) {
 }
 
 async function fetchWithBrowserApi(productUrl: string) {
+  if (process.env.SCRAPINGBEE_API_KEY) {
+    const apiUrl = new URL("https://app.scrapingbee.com/api/v1/");
+    apiUrl.searchParams.set("api_key", process.env.SCRAPINGBEE_API_KEY);
+    apiUrl.searchParams.set("url", productUrl);
+    apiUrl.searchParams.set("render_js", "true");
+    apiUrl.searchParams.set("premium_proxy", "true");
+    apiUrl.searchParams.set("country_code", "us");
+    apiUrl.searchParams.set("wait", "3000");
+
+    return fetch(apiUrl, { cache: "no-store" });
+  }
+
   if (process.env.ZENROWS_API_KEY) {
     const apiUrl = new URL("https://api.zenrows.com/v1/");
     apiUrl.searchParams.set("apikey", process.env.ZENROWS_API_KEY);
@@ -183,7 +246,11 @@ async function fetchProductHtml(productUrl: string) {
   const browserResponse = await fetchWithBrowserApi(productUrl);
   if (browserResponse?.ok) return browserResponse.text();
   if (browserResponse) {
-    const provider = process.env.ZENROWS_API_KEY ? "ZenRows" : "ScraperAPI";
+    const provider = process.env.SCRAPINGBEE_API_KEY
+      ? "ScrapingBee"
+      : process.env.ZENROWS_API_KEY
+        ? "ZenRows"
+        : "ScraperAPI";
     const detail = cleanText(await browserResponse.text());
     throw new Error(`${provider} respondió con error ${browserResponse.status}${detail ? `: ${detail}` : ""}`);
   }
@@ -223,15 +290,7 @@ export async function POST(request: Request) {
     const images = readImages($, body.url);
     const image = images[0] || "";
 
-    const rawPrice = readMeta($, [
-      'meta[property="product:price:amount"]',
-      'meta[property="og:price:amount"]',
-      '[itemprop="price"]',
-      ".woocommerce-Price-amount",
-      ".summary .price",
-      ".price"
-    ]);
-    const price = cleanPrice(rawPrice);
+    const price = readPrice($);
 
     const stock = cleanText(readMeta($, [
       ".stock",
@@ -240,12 +299,7 @@ export async function POST(request: Request) {
       '[class*="availability"]'
     ]));
 
-    const deliveryTime = cleanText(readMeta($, [
-      '[class*="delivery"]',
-      '[class*="shipping"]',
-      '[class*="entrega"]',
-      '[class*="envio"]'
-    ]));
+    const deliveryTime = readDeliveryTime($);
 
     return NextResponse.json({
       title: title || "Título no detectado",
