@@ -12,7 +12,9 @@ import { createProduct, getProductsByOwner, updateProductCategory } from "@/lib/
 import { createDefaultStore, getStoreByOwnerId, updateStore, type StoreCategory, type StoreProfile } from "@/lib/stores";
 import {
   BarChart3,
+  Bell,
   Boxes,
+  ChevronRight,
   Copy,
   ExternalLink,
   Grid2X2,
@@ -20,13 +22,17 @@ import {
   List,
   Loader2,
   LogOut,
-  Megaphone,
+  MousePointerClick,
   PackagePlus,
   Palette,
+  Plus,
   Save,
+  Search,
+  Settings,
+  Store,
   Tags,
   Upload,
-  UserRound,
+  Users,
   WandSparkles
 } from "lucide-react";
 
@@ -57,12 +63,12 @@ type DashboardTab = "overview" | "profile" | "store" | "products" | "categories"
 
 const tabs: Array<{ id: DashboardTab; label: string; icon: typeof LayoutDashboard }> = [
   { id: "overview", label: "Resumen", icon: LayoutDashboard },
-  { id: "profile", label: "Perfil", icon: UserRound },
-  { id: "store", label: "Tienda", icon: Palette },
   { id: "products", label: "Productos", icon: Boxes },
   { id: "categories", label: "Categorias", icon: Tags },
-  { id: "marketing", label: "Marketing", icon: Megaphone },
-  { id: "analytics", label: "Analitica", icon: BarChart3 }
+  { id: "marketing", label: "Clientes", icon: Users },
+  { id: "analytics", label: "Analitica", icon: BarChart3 },
+  { id: "store", label: "Tienda", icon: Store },
+  { id: "profile", label: "Configuracion", icon: Settings }
 ];
 
 export default function DashboardPage() {
@@ -73,7 +79,11 @@ export default function DashboardPage() {
   const [products, setProducts] = useState<Product[]>([]);
   const [customers, setCustomers] = useState<Customer[]>([]);
   const [productView, setProductView] = useState<"list" | "grid">("grid");
+  const [showProductForm, setShowProductForm] = useState(false);
   const [productMode, setProductMode] = useState<"affiliate" | "physical">("affiliate");
+  const [productSearch, setProductSearch] = useState("");
+  const [productCategoryFilter, setProductCategoryFilter] = useState("all");
+  const [productTypeFilter, setProductTypeFilter] = useState("all");
   const [url, setUrl] = useState("");
   const [result, setResult] = useState<AnalyzeResult | null>(null);
   const [category, setCategory] = useState("General");
@@ -108,6 +118,21 @@ export default function DashboardPage() {
 
   const totalClicks = products.reduce((sum, product) => sum + product.clicks, 0);
   const topProduct = [...products].sort((a, b) => b.clicks - a.clicks)[0];
+  const filteredProducts = useMemo(() => {
+    const term = productSearch.trim().toLowerCase();
+    return products.filter((product) => {
+      const matchesSearch = !term || [product.title, product.category, product.store, ...(product.keywords || [])]
+        .join(" ")
+        .toLowerCase()
+        .includes(term);
+      const matchesCategory = productCategoryFilter === "all" || product.category === productCategoryFilter;
+      const matchesType = productTypeFilter === "all" || product.productType === productTypeFilter;
+      return matchesSearch && matchesCategory && matchesType;
+    });
+  }, [productCategoryFilter, productSearch, productTypeFilter, products]);
+  const chartData: Array<{ id: string; clicks: number }> = products.length
+    ? products.slice(0, 9).map((product) => ({ id: product.id, clicks: product.clicks }))
+    : Array.from({ length: 7 }, (_, index) => ({ id: `empty-${index}`, clicks: 12 + index * 9 }));
 
   function parseKeywords(value: string) {
     return Array.from(new Set(value.split(",").map((item) => item.trim()).filter(Boolean)));
@@ -312,6 +337,7 @@ export default function DashboardPage() {
       setProductAttributes("");
       setMessage("Producto publicado en tu tienda.");
       setActiveTab("products");
+      setShowProductForm(false);
     } catch (err) {
       setError(err instanceof Error ? err.message : "No se pudo publicar el producto");
     } finally {
@@ -351,6 +377,7 @@ export default function DashboardPage() {
       setProductKeywords("");
       setProductAttributes("");
       setMessage("Producto fisico publicado.");
+      setShowProductForm(false);
     } catch (err) {
       setError(err instanceof Error ? err.message : "No se pudo publicar el producto fisico");
     } finally {
@@ -434,100 +461,187 @@ export default function DashboardPage() {
   }
 
   return (
-    <main className="min-h-screen bg-[#f7f8fb]">
-      <header className="sticky top-0 z-30 border-b border-slate-200 bg-white/90 backdrop-blur">
-        <div className="mx-auto flex max-w-7xl items-center justify-between gap-4 px-5 py-4">
-          <Link href="/" className="flex items-center gap-2 text-lg font-black text-slate-950">
+    <main className="admin-shell min-h-screen bg-[#f8fafc] text-slate-900">
+      <aside className="fixed inset-y-0 left-0 z-40 hidden w-[232px] border-r border-slate-200 bg-white lg:flex lg:flex-col">
+        <Link href="/" className="flex h-16 items-center gap-3 border-b border-slate-200 px-5">
+          {/* eslint-disable-next-line @next/next/no-img-element */}
+          <img src="/afilyshop-icon.png" alt="AfilyShop" className="size-9 rounded-lg object-cover" />
+          <div>
+            <div className="text-lg font-bold text-blue-700">AfilyShop</div>
+            <div className="text-xs font-medium text-slate-500">Panel de vendedor</div>
+          </div>
+        </Link>
+        <nav className="flex-1 py-5">
+          {tabs.map((tab) => (
+            <button
+              key={tab.id}
+              onClick={() => {
+                setActiveTab(tab.id);
+                if (tab.id !== "products") setShowProductForm(false);
+              }}
+              className={`relative flex w-full items-center gap-3 px-5 py-3 text-left text-sm font-semibold transition ${
+                activeTab === tab.id ? "bg-blue-50 text-blue-700" : "text-slate-600 hover:bg-slate-50 hover:text-slate-950"
+              }`}
+            >
+              {activeTab === tab.id && <span className="absolute inset-y-0 left-0 w-1 bg-blue-600" />}
+              <tab.icon size={19} strokeWidth={1.8} /> {tab.label}
+            </button>
+          ))}
+        </nav>
+        <div className="border-t border-slate-200 p-4">
+          <div className="mb-3 flex items-center gap-3">
+            <div className="grid size-9 shrink-0 place-items-center rounded-full bg-blue-100 text-xs font-bold text-blue-700">
+              {(store?.ownerName || user?.email || "U").slice(0, 2).toUpperCase()}
+            </div>
+            <div className="min-w-0">
+              <div className="truncate text-sm font-semibold">{store?.ownerName || "Vendedor"}</div>
+              <div className="truncate text-xs text-slate-500">{store?.plan || "free"}</div>
+            </div>
+          </div>
+          <button onClick={logout} className="flex w-full items-center gap-2 rounded-md px-3 py-2 text-sm font-semibold text-slate-600 hover:bg-slate-50 hover:text-red-600">
+            <LogOut size={17} /> Cerrar sesion
+          </button>
+        </div>
+      </aside>
+
+      <div className="lg:pl-[232px]">
+        <header className="sticky top-0 z-30 flex h-16 items-center gap-3 border-b border-slate-200 bg-white px-4 md:px-6">
+          <Link href="/" className="flex items-center gap-2 lg:hidden">
             {/* eslint-disable-next-line @next/next/no-img-element */}
-            <img src="/afilyshop-icon.png" alt="AfilyShop" className="size-10 rounded-2xl object-cover" />
-            AfilyShop
+            <img src="/afilyshop-icon.png" alt="AfilyShop" className="size-8 rounded-lg object-cover" />
+            <span className="font-bold text-blue-700">AfilyShop</span>
           </Link>
-          <div className="flex items-center gap-2">
+          <div className="hidden max-w-md flex-1 items-center gap-2 rounded-md border border-slate-200 bg-slate-50 px-3 py-2 md:flex">
+            <Search size={17} className="text-slate-400" />
+            <input
+              value={productSearch}
+              onChange={(event) => setProductSearch(event.target.value)}
+              onFocus={() => {
+                setActiveTab("products");
+                setShowProductForm(false);
+              }}
+              className="w-full bg-transparent text-sm outline-none"
+              placeholder="Buscar productos..."
+            />
+          </div>
+          <div className="ml-auto flex items-center gap-2">
+            <button className="grid size-9 place-items-center rounded-md text-slate-500 hover:bg-slate-100" title="Notificaciones">
+              <Bell size={19} />
+            </button>
             {store && (
-              <a href={publicUrl} target="_blank" className="hidden items-center gap-2 rounded-2xl bg-brand-50 px-4 py-2 text-sm font-black text-brand-600 sm:inline-flex">
-                Ver mi pagina <ExternalLink size={16} />
+              <a href={publicUrl} target="_blank" rel="noopener noreferrer" className="hidden items-center gap-2 rounded-md border border-slate-300 bg-white px-3 py-2 text-sm font-semibold text-slate-700 sm:inline-flex">
+                Ver tienda <ExternalLink size={15} />
               </a>
             )}
-            <button onClick={logout} className="inline-flex items-center gap-2 rounded-2xl bg-slate-950 px-4 py-2 text-sm font-black text-white">
-              <LogOut size={16} /> Salir
+            <button
+              onClick={() => {
+                setActiveTab("products");
+                setShowProductForm(true);
+              }}
+              className="inline-flex items-center gap-2 rounded-md bg-blue-600 px-3 py-2 text-sm font-semibold text-white hover:bg-blue-700"
+            >
+              <Plus size={17} /> <span className="hidden sm:inline">Agregar producto</span>
             </button>
           </div>
-        </div>
-      </header>
+        </header>
 
-      <section className="mx-auto grid max-w-7xl gap-6 px-5 py-8 lg:grid-cols-[260px_1fr]">
-        <aside className="h-fit rounded-[2rem] bg-white p-3 shadow-soft ring-1 ring-slate-100">
-          <div className="p-3">
-            <div className="text-sm font-black text-slate-400">Panel del vendedor</div>
-            <div className="mt-1 truncate text-xl font-black text-slate-950">{store?.name || "Mi tienda"}</div>
-          </div>
-          <nav className="grid gap-1">
-            {tabs.map((tab) => (
-              <button
-                key={tab.id}
-                onClick={() => setActiveTab(tab.id)}
-                className={`flex items-center gap-3 rounded-2xl px-4 py-3 text-left text-sm font-black ${
-                  activeTab === tab.id ? "bg-brand-600 text-white" : "text-slate-600 hover:bg-slate-50"
-                }`}
-              >
-                <tab.icon size={18} /> {tab.label}
+        <section className="mx-auto w-full max-w-[1600px] px-4 pb-24 pt-6 md:px-6 lg:pb-8">
+          <div className="mb-6 flex flex-col justify-between gap-4 sm:flex-row sm:items-end">
+            <div>
+              <div className="flex items-center gap-2 text-sm font-medium text-slate-500">
+                AfilyShop <ChevronRight size={14} /> <span className="text-blue-700">{showProductForm ? "Nuevo producto" : tabs.find((tab) => tab.id === activeTab)?.label}</span>
+              </div>
+              <h1 className="mt-2 text-3xl font-bold tracking-normal text-slate-950">
+                {showProductForm ? "Nuevo producto" : activeTab === "overview" ? "Dashboard de la tienda" : tabs.find((tab) => tab.id === activeTab)?.label}
+              </h1>
+              {activeTab === "products" && !showProductForm && <p className="mt-1 text-sm text-slate-500">Gestiona tu inventario y enlaces de afiliados.</p>}
+            </div>
+            {showProductForm && (
+              <button onClick={() => setShowProductForm(false)} className="rounded-md border border-slate-300 bg-white px-4 py-2 text-sm font-semibold text-slate-700">
+                Volver al inventario
               </button>
-            ))}
-          </nav>
-        </aside>
-
-        <div>
-          <div className="mb-6">
-            <p className="font-black uppercase tracking-wide text-brand-600">Dashboard</p>
-            <h1 className="mt-2 text-4xl font-black text-slate-950">{store?.name || "Mi tienda"}</h1>
-            {publicUrl && <p className="mt-2 break-all text-sm font-bold text-slate-500">{publicUrl}</p>}
+            )}
           </div>
 
           {(error || message) && (
-            <div className={`mb-6 rounded-2xl p-4 text-sm font-semibold ${error ? "bg-red-50 text-red-700" : "bg-emerald-50 text-emerald-700"}`}>
+            <div className={`mb-6 rounded-md border p-4 text-sm font-semibold ${error ? "border-red-200 bg-red-50 text-red-700" : "border-emerald-200 bg-emerald-50 text-emerald-700"}`}>
               {error || message}
             </div>
           )}
 
           {activeTab === "overview" && (
-            <div className="grid gap-6">
-              <div className="grid gap-4 md:grid-cols-4">
+            <div className="grid gap-5">
+              <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
                 {[
-                  ["Productos", products.length],
-                  ["Categorias", categories.length],
-                  ["Clics", totalClicks],
-                  ["Plan", store?.plan || "free"]
-                ].map(([label, value]) => (
-                  <div key={label} className="rounded-[1.5rem] bg-white p-5 shadow-soft ring-1 ring-slate-100">
-                    <div className="text-sm font-black text-slate-400">{label}</div>
-                    <div className="mt-2 text-3xl font-black text-slate-950">{value}</div>
+                  { label: "Productos", value: products.length, icon: Boxes, detail: `${products.filter((item) => item.productType === "affiliate").length} afiliados` },
+                  { label: "Clientes", value: customers.length, icon: Users, detail: "Contactos registrados" },
+                  { label: "Clics en enlaces", value: totalClicks, icon: MousePointerClick, detail: topProduct ? `Lider: ${topProduct.title}` : "Sin actividad" },
+                  { label: "Categorias", value: categories.length, icon: Tags, detail: `Plan ${store?.plan || "free"}` }
+                ].map((metric) => (
+                  <div key={metric.label} className="rounded-lg border border-slate-200 bg-white p-5">
+                    <div className="flex items-start justify-between gap-3">
+                      <div className="text-xs font-semibold uppercase text-slate-500">{metric.label}</div>
+                      <metric.icon size={20} className="text-blue-600" />
+                    </div>
+                    <div className="mt-5 text-3xl font-bold text-slate-950">{metric.value}</div>
+                    <div className="mt-1 truncate text-xs text-slate-500">{metric.detail}</div>
                   </div>
                 ))}
               </div>
 
-              <div className="grid gap-6 lg:grid-cols-2">
-                <section className="rounded-[2rem] bg-white p-6 shadow-soft ring-1 ring-slate-100">
-                  <h2 className="text-2xl font-black">Acciones rapidas</h2>
-                  <div className="mt-5 grid gap-3 sm:grid-cols-2">
-                    <button onClick={() => setActiveTab("products")} className="rounded-2xl bg-slate-950 px-5 py-4 text-left font-black text-white">Gestionar mis productos</button>
-                    <button onClick={() => setActiveTab("store")} className="rounded-2xl bg-brand-600 px-5 py-4 text-left font-black text-white">Editar mi tienda</button>
-                    <a href={publicUrl} target="_blank" className="rounded-2xl bg-white px-5 py-4 text-left font-black text-slate-950 ring-1 ring-slate-200">Ver mi pagina</a>
-                    <button onClick={() => setActiveTab("analytics")} className="rounded-2xl bg-white px-5 py-4 text-left font-black text-slate-950 ring-1 ring-slate-200">Ver analitica</button>
+              <div className="grid gap-5 xl:grid-cols-[minmax(0,1fr)_320px]">
+                <section className="rounded-lg border border-slate-200 bg-white p-5">
+                  <div className="flex items-start justify-between gap-4">
+                    <div>
+                      <h2 className="text-lg font-semibold">Rendimiento de clics</h2>
+                      <p className="mt-1 text-sm text-slate-500">Distribucion actual entre tus productos publicados.</p>
+                    </div>
+                    <button onClick={() => setActiveTab("analytics")} className="text-sm font-semibold text-blue-700">Ver analitica</button>
+                  </div>
+                  <div className="mt-8 flex h-56 items-end gap-3 border-b border-l border-slate-200 px-4">
+                    {chartData.map((product) => {
+                      const clicks = product.clicks;
+                      const maxClicks = Math.max(1, ...products.map((item) => item.clicks));
+                      const height = products.length ? Math.max(10, Math.round((clicks / maxClicks) * 100)) : clicks;
+                      return <div key={product.id} className="min-w-0 flex-1 rounded-t-sm bg-blue-500/70" style={{ height: `${height}%` }} />;
+                    })}
+                  </div>
+                  <div className="mt-3 flex justify-between text-xs font-medium text-slate-400">
+                    <span>Menor actividad</span><span>Productos</span><span>Mayor actividad</span>
                   </div>
                 </section>
 
-                <section className="rounded-[2rem] bg-slate-950 p-6 text-white shadow-soft">
-                  <h2 className="text-2xl font-black">Producto destacado</h2>
-                  {topProduct ? (
-                    <div className="mt-5">
-                      <div className="text-xl font-black">{topProduct.title}</div>
-                      <div className="mt-2 text-sm font-semibold text-slate-300">{topProduct.clicks} clics registrados</div>
-                    </div>
-                  ) : (
-                    <p className="mt-5 text-slate-300">Publica tu primer producto para empezar a medir resultados.</p>
-                  )}
+                <section className="rounded-lg border border-slate-200 bg-white p-5">
+                  <h2 className="text-lg font-semibold">Acciones rapidas</h2>
+                  <div className="mt-4 grid gap-2">
+                    {[
+                      { label: "Agregar producto", detail: "Nuevo item al inventario", icon: PackagePlus, action: () => { setActiveTab("products"); setShowProductForm(true); } },
+                      { label: "Gestionar clientes", detail: "Contactos y seguimiento", icon: Users, action: () => setActiveTab("marketing") },
+                      { label: "Editar tienda", detail: "Marca y apariencia", icon: Palette, action: () => setActiveTab("store") }
+                    ].map((action) => (
+                      <button key={action.label} onClick={action.action} className="flex items-center gap-3 rounded-md border border-slate-200 p-3 text-left hover:border-blue-300 hover:bg-blue-50/40">
+                        <span className="grid size-10 place-items-center rounded-md bg-blue-50 text-blue-700"><action.icon size={19} /></span>
+                        <span className="min-w-0 flex-1">
+                          <span className="block text-sm font-semibold">{action.label}</span>
+                          <span className="block text-xs text-slate-500">{action.detail}</span>
+                        </span>
+                        <ChevronRight size={17} className="text-slate-400" />
+                      </button>
+                    ))}
+                  </div>
                 </section>
               </div>
+
+              <section className="rounded-lg border border-slate-200 bg-white">
+                <div className="flex items-center justify-between border-b border-slate-200 px-5 py-4">
+                  <div>
+                    <h2 className="text-lg font-semibold">Productos con mas actividad</h2>
+                    <p className="text-sm text-slate-500">Los enlaces que reciben mas clics.</p>
+                  </div>
+                  <button onClick={() => setActiveTab("products")} className="text-sm font-semibold text-blue-700">Ver productos</button>
+                </div>
+                <ProductTable products={[...products].sort((a, b) => b.clicks - a.clicks).slice(0, 5)} publicUsername={store?.username || ""} compact />
+              </section>
             </div>
           )}
 
@@ -630,16 +744,16 @@ export default function DashboardPage() {
           )}
 
           {activeTab === "products" && (
-            <div className="grid gap-6">
-              <section className="rounded-[2rem] bg-white p-6 shadow-soft ring-1 ring-slate-100">
+            showProductForm ? (
+              <section className="rounded-lg border border-slate-200 bg-white p-5 md:p-6">
                 <div className="flex flex-col justify-between gap-4 md:flex-row md:items-center">
                   <div>
-                    <h2 className="text-2xl font-black">Agregar producto</h2>
-                    <p className="mt-1 text-sm font-semibold text-slate-500">Crea productos afiliados desde un link o productos físicos propios.</p>
+                    <h2 className="text-lg font-semibold">Informacion del producto</h2>
+                    <p className="mt-1 text-sm text-slate-500">Crea un producto afiliado desde un enlace o agrega un producto fisico.</p>
                   </div>
-                  <div className="flex rounded-2xl bg-slate-100 p-1">
-                    <button onClick={() => setProductMode("affiliate")} className={`rounded-xl px-4 py-2 text-sm font-black ${productMode === "affiliate" ? "bg-white shadow-sm" : "text-slate-500"}`}>Afiliado</button>
-                    <button onClick={() => setProductMode("physical")} className={`rounded-xl px-4 py-2 text-sm font-black ${productMode === "physical" ? "bg-white shadow-sm" : "text-slate-500"}`}>Fisico</button>
+                  <div className="flex rounded-md border border-slate-200 bg-slate-50 p-1">
+                    <button onClick={() => setProductMode("affiliate")} className={`rounded px-4 py-2 text-sm font-semibold ${productMode === "affiliate" ? "bg-white text-blue-700 shadow-sm" : "text-slate-500"}`}>Afiliado</button>
+                    <button onClick={() => setProductMode("physical")} className={`rounded px-4 py-2 text-sm font-semibold ${productMode === "physical" ? "bg-white text-blue-700 shadow-sm" : "text-slate-500"}`}>Fisico</button>
                   </div>
                 </div>
 
@@ -757,39 +871,56 @@ export default function DashboardPage() {
                   )}
                 </div>
               </section>
-
-              <section className="rounded-[2rem] bg-white p-6 shadow-soft ring-1 ring-slate-100">
+            ) : (
+              <section className="rounded-lg border border-slate-200 bg-white">
                 <div className="flex flex-col justify-between gap-4 md:flex-row md:items-center">
-                  <div>
-                    <h2 className="text-2xl font-black">Mis productos</h2>
-                    <p className="mt-1 text-sm font-semibold text-slate-500">Arrastra un producto encima de una categoría para moverlo.</p>
+                  <div className="px-5 pt-5">
+                    <h2 className="text-xl font-semibold">Productos ({filteredProducts.length})</h2>
+                    <p className="mt-1 text-sm text-slate-500">Arrastra un producto encima de una categoria para moverlo.</p>
                   </div>
-                  <div className="flex items-center gap-2">
-                    <button onClick={() => setProductView("grid")} className={`grid size-10 place-items-center rounded-xl ${productView === "grid" ? "bg-slate-950 text-white" : "bg-slate-100 text-slate-500"}`}><Grid2X2 size={18} /></button>
-                    <button onClick={() => setProductView("list")} className={`grid size-10 place-items-center rounded-xl ${productView === "list" ? "bg-slate-950 text-white" : "bg-slate-100 text-slate-500"}`}><List size={18} /></button>
-                    <span className="rounded-full bg-brand-50 px-4 py-2 text-sm font-black text-brand-600">{products.length}</span>
+                  <div className="flex items-center gap-1 px-5 pt-5">
+                    <button onClick={() => setProductView("grid")} title="Vista en cuadricula" className={`grid size-9 place-items-center rounded-md border ${productView === "grid" ? "border-blue-600 bg-blue-50 text-blue-700" : "border-slate-200 text-slate-500"}`}><Grid2X2 size={17} /></button>
+                    <button onClick={() => setProductView("list")} title="Vista en lista" className={`grid size-9 place-items-center rounded-md border ${productView === "list" ? "border-blue-600 bg-blue-50 text-blue-700" : "border-slate-200 text-slate-500"}`}><List size={17} /></button>
                   </div>
                 </div>
+                <div className="mt-5 grid gap-3 border-y border-slate-200 bg-slate-50/70 p-4 md:grid-cols-[minmax(220px,1fr)_200px_180px_auto]">
+                  <label className="flex items-center gap-2 rounded-md border border-slate-200 bg-white px-3">
+                    <Search size={16} className="text-slate-400" />
+                    <input value={productSearch} onChange={(event) => setProductSearch(event.target.value)} className="min-h-10 w-full bg-transparent text-sm outline-none" placeholder="Buscar productos..." />
+                  </label>
+                  <select value={productCategoryFilter} onChange={(event) => setProductCategoryFilter(event.target.value)} className="rounded-md border border-slate-200 bg-white px-3 text-sm outline-none">
+                    <option value="all">Todas las categorias</option>
+                    {categories.map((item) => <option key={item.name} value={item.name}>{item.name}</option>)}
+                  </select>
+                  <select value={productTypeFilter} onChange={(event) => setProductTypeFilter(event.target.value)} className="rounded-md border border-slate-200 bg-white px-3 text-sm outline-none">
+                    <option value="all">Todos los tipos</option>
+                    <option value="affiliate">Afiliados</option>
+                    <option value="physical">Fisicos</option>
+                  </select>
+                  <button onClick={() => setShowProductForm(true)} className="inline-flex min-h-10 items-center justify-center gap-2 rounded-md bg-blue-600 px-4 text-sm font-semibold text-white">
+                    <Plus size={16} /> Agregar
+                  </button>
+                </div>
                 {productView === "list" ? (
-                  <ProductTable products={products} publicUsername={store?.username || ""} onCopy={copyText} />
+                  <ProductTable products={filteredProducts} publicUsername={store?.username || ""} onCopy={copyText} />
                 ) : (
-                  <div className="mt-5 grid gap-4 md:grid-cols-2 xl:grid-cols-3">
-                    {products.map((product) => (
-                      <article key={product.id} draggable onDragStart={(event) => event.dataTransfer.setData("productId", product.id)} className="rounded-2xl border border-slate-100 bg-slate-50 p-4">
+                  <div className="grid gap-4 p-5 md:grid-cols-2 xl:grid-cols-3 2xl:grid-cols-4">
+                    {filteredProducts.map((product) => (
+                      <article key={product.id} draggable onDragStart={(event) => event.dataTransfer.setData("productId", product.id)} className="rounded-lg border border-slate-200 bg-white p-3">
                         {/* eslint-disable-next-line @next/next/no-img-element */}
-                        <img src={product.imageUrl || "/afilyshop-icon.png"} alt={product.title} className="h-36 w-full rounded-xl object-cover" />
-                        <div className="mt-3 text-xs font-black uppercase text-slate-400">{product.productType === "physical" ? "Fisico" : "Afiliado"} · {product.category}</div>
-                        <h3 className="mt-1 line-clamp-2 font-black">{product.title}</h3>
+                        <img src={product.imageUrl || "/afilyshop-icon.png"} alt={product.title} className="h-36 w-full rounded-md bg-slate-50 object-contain p-2" />
+                        <div className="mt-3 text-xs font-semibold uppercase text-slate-400">{product.productType === "physical" ? "Fisico" : "Afiliado"} · {product.category}</div>
+                        <h3 className="mt-1 line-clamp-2 text-sm font-semibold">{product.title}</h3>
                         <div className="mt-3 flex items-center justify-between">
-                          <span className="text-lg font-black">${product.price.toFixed(2)}</span>
-                          <button onClick={() => copyText(`${window.location.origin}/${store?.username}/product/${product.slug}`)} className="grid size-9 place-items-center rounded-xl bg-white text-slate-600 ring-1 ring-slate-200"><Copy size={16} /></button>
+                          <span className="text-lg font-bold">${product.price.toFixed(2)}</span>
+                          <button onClick={() => copyText(`${window.location.origin}/${store?.username}/product/${product.slug}`)} title="Copiar enlace" className="grid size-8 place-items-center rounded-md border border-slate-200 text-slate-600"><Copy size={15} /></button>
                         </div>
                       </article>
                     ))}
                   </div>
                 )}
               </section>
-            </div>
+            )
           )}
 
           {activeTab === "categories" && (
@@ -893,44 +1024,95 @@ export default function DashboardPage() {
               <ProductTable products={products} publicUsername={store?.username || ""} compact />
             </section>
           )}
-        </div>
-      </section>
+        </section>
+      </div>
+
+      <nav className="fixed inset-x-0 bottom-0 z-50 grid grid-cols-5 border-t border-slate-200 bg-white px-1 pb-[max(6px,env(safe-area-inset-bottom))] pt-1 lg:hidden">
+        {[
+          tabs.find((tab) => tab.id === "overview"),
+          tabs.find((tab) => tab.id === "products"),
+          tabs.find((tab) => tab.id === "marketing"),
+          tabs.find((tab) => tab.id === "analytics"),
+          tabs.find((tab) => tab.id === "profile")
+        ].filter(Boolean).map((tab) => {
+          const mobileTab = tab!;
+          const MobileIcon = mobileTab.icon;
+          return (
+            <button
+              key={mobileTab.id}
+              onClick={() => {
+                setActiveTab(mobileTab.id);
+                setShowProductForm(false);
+              }}
+              className={`flex min-w-0 flex-col items-center gap-1 px-1 py-2 text-[11px] font-semibold ${activeTab === mobileTab.id ? "text-blue-700" : "text-slate-500"}`}
+            >
+              <MobileIcon size={19} />
+              <span className="truncate">{mobileTab.id === "profile" ? "Mas" : mobileTab.label}</span>
+            </button>
+          );
+        })}
+      </nav>
     </main>
   );
 }
 
 function ProductTable({ products, publicUsername, compact = false, onCopy }: { products: Product[]; publicUsername: string; compact?: boolean; onCopy?: (value: string) => void }) {
   return (
-    <div className="mt-5 overflow-x-auto">
-      <table className="w-full text-left text-sm">
-        <thead className="text-slate-500">
+    <div className={compact ? "overflow-x-auto" : "overflow-x-auto"}>
+      <table className="w-full min-w-[760px] text-left text-sm">
+        <thead className="border-b border-slate-200 bg-slate-50 text-xs font-semibold uppercase text-slate-500">
           <tr>
-            <th className="py-3">Producto</th>
-            <th>Categoria</th>
-            <th>Precio</th>
-            <th>Clics</th>
-            {!compact && <th>Link</th>}
+            <th className="px-5 py-3">Producto</th>
+            <th className="px-4 py-3">Categoria</th>
+            {!compact && <th className="px-4 py-3">Tipo</th>}
+            <th className="px-4 py-3">Precio</th>
+            {!compact && <th className="px-4 py-3">Stock</th>}
+            <th className="px-4 py-3">Clics</th>
+            <th className="px-4 py-3">Estado</th>
+            {!compact && <th className="px-4 py-3 text-right">Acciones</th>}
           </tr>
         </thead>
         <tbody>
           {products.map((product) => (
-            <tr key={product.id} className="border-t border-slate-100">
-              <td className="py-4 font-bold">{product.title}</td>
-              <td>{product.category}</td>
-              <td>${product.price.toFixed(2)}</td>
-              <td>{product.clicks}</td>
+            <tr key={product.id} className="border-b border-slate-100 last:border-0 hover:bg-slate-50/70">
+              <td className="px-5 py-3">
+                <div className="flex items-center gap-3">
+                  {/* eslint-disable-next-line @next/next/no-img-element */}
+                  <img src={product.imageUrl || "/afilyshop-icon.png"} alt="" className="size-11 rounded-md border border-slate-200 bg-white object-contain p-1" />
+                  <div className="min-w-0">
+                    <div className="max-w-[280px] truncate font-semibold text-slate-950">{product.title}</div>
+                    <div className="mt-0.5 max-w-[280px] truncate text-xs text-slate-400">{product.slug}</div>
+                  </div>
+                </div>
+              </td>
+              <td className="px-4 py-3 text-slate-600">{product.category}</td>
               {!compact && (
-                <td>
-                  <div className="flex items-center gap-3">
-                    <Link href={`/${publicUsername}/product/${product.slug}`} target="_blank" rel="noopener noreferrer" className="font-black text-brand-600">Ver</Link>
-                    {onCopy && <button onClick={() => onCopy(`${window.location.origin}/${publicUsername}/product/${product.slug}`)} className="font-black text-slate-500">Copiar</button>}
+                <td className="px-4 py-3">
+                  <span className={`rounded px-2 py-1 text-xs font-semibold ${product.productType === "physical" ? "bg-indigo-50 text-indigo-700" : "bg-cyan-50 text-cyan-700"}`}>
+                    {product.productType === "physical" ? "Fisico" : "Afiliado"}
+                  </span>
+                </td>
+              )}
+              <td className="px-4 py-3 font-mono font-semibold">${product.price.toFixed(2)}</td>
+              {!compact && <td className="px-4 py-3 text-slate-600">{product.stock || "No indicado"}</td>}
+              <td className="px-4 py-3 font-medium">{product.clicks}</td>
+              <td className="px-4 py-3">
+                <span className="inline-flex items-center gap-1.5 rounded bg-emerald-50 px-2 py-1 text-xs font-semibold text-emerald-700">
+                  <span className="size-1.5 rounded-full bg-emerald-500" /> Publicado
+                </span>
+              </td>
+              {!compact && (
+                <td className="px-4 py-3">
+                  <div className="flex items-center justify-end gap-1">
+                    <Link href={`/${publicUsername}/product/${product.slug}`} target="_blank" rel="noopener noreferrer" title="Ver producto" className="grid size-8 place-items-center rounded-md text-blue-700 hover:bg-blue-50"><ExternalLink size={15} /></Link>
+                    {onCopy && <button onClick={() => onCopy(`${window.location.origin}/${publicUsername}/product/${product.slug}`)} title="Copiar enlace" className="grid size-8 place-items-center rounded-md text-slate-600 hover:bg-slate-100"><Copy size={15} /></button>}
                   </div>
                 </td>
               )}
             </tr>
           ))}
           {!products.length && (
-            <tr><td colSpan={compact ? 4 : 5} className="py-8 text-center font-semibold text-slate-400">Todavia no tienes productos publicados.</td></tr>
+            <tr><td colSpan={compact ? 5 : 8} className="px-5 py-12 text-center font-medium text-slate-400">Todavia no tienes productos publicados.</td></tr>
           )}
         </tbody>
       </table>
